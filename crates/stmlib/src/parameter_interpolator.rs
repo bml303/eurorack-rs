@@ -1,34 +1,45 @@
 //! `stmlib/dsp/parameter_interpolator.h`.
 //!
-//! In C this is an RAII helper: the destructor writes the final value back
-//! through a `float*`. Rust has no implicit borrow of external state across a
-//! scope like that, so the idiomatic shape is: construct from a value, call
-//! [`ParameterInterpolator::next`] `size` times, then read
-//! [`ParameterInterpolator::value`] back into your state field.
+//! In C this is an RAII helper: it borrows a `float*` and its destructor
+//! writes the final ramped value back through it when the object goes out of
+//! scope. That's exactly a Rust `Drop` impl holding a `&mut f32` -- so unlike
+//! most of this workspace's C++-isms, this one ports as a *more* idiomatic
+//! Rust type than a manual "call `.value()` and write it back yourself" API
+//! would be, while remaining just as easy to get wrong if you let the
+//! guard drop before you're done (its `next()` calls no longer count).
 
-/// Linear per-sample ramp between an old and a new parameter value.
-#[derive(Debug, Clone, Copy)]
-pub struct ParameterInterpolator {
+/// Linear per-sample ramp between an old and a new parameter value. Writes
+/// the value it reached back into the borrowed `state` when dropped -- construct
+/// it, call [`next`](Self::next) up to `size` times, then let it drop (end its
+/// scope, or `drop(interpolator)`) before reading `state` again.
+pub struct ParameterInterpolator<'a> {
+    state: &'a mut f32,
     value: f32,
     increment: f32,
 }
 
-impl ParameterInterpolator {
-    /// Ramp from `from` to `to` across `size` samples.
+impl<'a> ParameterInterpolator<'a> {
+    /// Ramp `*state` to `new_value` over `size` samples.
     #[inline]
-    pub fn new(from: f32, to: f32, size: usize) -> Self {
+    pub fn new(state: &'a mut f32, new_value: f32, size: usize) -> Self {
+        let value = *state;
+        let increment = (new_value - value) / size as f32;
         Self {
-            value: from,
-            increment: (to - from) / size as f32,
+            state,
+            value,
+            increment,
         }
     }
 
     /// Ramp using an explicit `1 / size` step (matches the C `step` ctor).
     #[inline]
-    pub fn with_step(from: f32, to: f32, step: f32) -> Self {
+    pub fn with_step(state: &'a mut f32, new_value: f32, step: f32) -> Self {
+        let value = *state;
+        let increment = (new_value - value) * step;
         Self {
-            value: from,
-            increment: (to - from) * step,
+            state,
+            value,
+            increment,
         }
     }
 
@@ -45,9 +56,16 @@ impl ParameterInterpolator {
         self.value + self.increment * t
     }
 
-    /// Current value -- write this back into your persistent state after the loop.
+    /// Current value (also written back to `state` on drop).
     #[inline]
     pub fn value(&self) -> f32 {
         self.value
+    }
+}
+
+impl Drop for ParameterInterpolator<'_> {
+    #[inline]
+    fn drop(&mut self) {
+        *self.state = self.value;
     }
 }

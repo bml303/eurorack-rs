@@ -103,6 +103,13 @@ pub fn clip_u16(x: i32) -> u16 {
     x.clamp(0, 65535) as u16
 }
 
+/// `Sqrt(x)` (host / `TEST` build calls `sqrtf`; the firmware uses the Cortex-M4F
+/// `vsqrt.f32` instruction -- same result).
+#[inline]
+pub fn sqrt(x: f32) -> f32 {
+    libm::sqrtf(x)
+}
+
 /// `SoftConvert(x)` -- saturate a normalised float and convert to `i16`.
 #[inline]
 pub fn soft_convert(x: f32) -> i16 {
