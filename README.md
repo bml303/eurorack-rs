@@ -7,13 +7,15 @@ modules](https://github.com/pichenettes/eurorack) to `no_std` library crates.
 
 | crate            | what it is                                   | state |
 |------------------|----------------------------------------------|-------|
-| `mi-stmlib`      | shared DSP library (`stmlib`)                | **ported** — primitives Braids needs, plus generally-useful helpers; tested |
+| `mi-stmlib`      | shared DSP library (`stmlib`)                | **ported** — primitives Braids/Plaits need, plus generally-useful helpers; tested |
 | `mi-braids`      | Braids macro-oscillator (~48 models)         | **ported — reference crate**; 47/48 models verified **bit-identical** to the C firmware DSP |
-| `mi-clouds` … `mi-yarns` (15 more) | one crate per remaining module | **scaffold** — `Cargo.toml` + `lib.rs` + a per-crate `PORTING.md` source inventory |
+| `mi-plaits`      | Plaits macro-oscillator (24 models)          | **ported**, floating-point (no bit-exactness contract); 22/24 models real, `SixOpEngine`/`SpeechEngine` are documented silent stubs — see [`crates/plaits/PORTING.md`](crates/plaits/PORTING.md) |
+| `mi-clouds` … `mi-yarns` (14 more) | one crate per remaining module | **scaffold** — `Cargo.toml` + `lib.rs` + a per-crate `PORTING.md` source inventory |
 
-`braids` is the worked example every other module port should follow. See
-[`PORTING.md`](PORTING.md) for the method, the fidelity contract, and the
-verification workflow.
+`braids` is the worked example every fixed-point module port should follow;
+`plaits` is the worked example for a floating-point module (no bit-exactness
+contract — see its own `PORTING.md`). See [`PORTING.md`](PORTING.md) for the
+method, the fidelity contract, and the verification workflow.
 
 ## Layout
 
@@ -23,6 +25,9 @@ crates/
                                    CosineOscillator, Random, units, gate flags
   braids/            mi-braids   — analog_oscillator, digital_oscillator,
                                    macro_oscillator, quantizer, svf, excitation,
+                                   envelope, resources (transpiled tables)
+  plaits/            mi-plaits   — voice (24 engine slots), oscillator, noise,
+                                   fx, physical_modelling, chords, drums,
                                    envelope, resources (transpiled tables)
   <module>/          mi-<module> — scaffold + PORTING.md
 tools/
@@ -35,7 +40,7 @@ tools/
 
 ```
 cargo build --workspace
-cargo test  --workspace          # includes the Braids equivalence golden test
+cargo test  --workspace          # Braids equivalence golden test + Plaits engine smoke test
 cargo clippy --workspace
 
 # render 5 s of one model to a WAV

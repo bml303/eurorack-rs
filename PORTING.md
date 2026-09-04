@@ -1,8 +1,12 @@
 # Porting guide
 
 This workspace turns the Mutable Instruments firmware DSP into `no_std` Rust
-libraries. `mi-braids` is fully ported and verified; it is the template for the
-rest.
+libraries. `mi-braids` is fully ported and verified; it is the template for
+fixed-point modules (most of them — the MI Cortex-M3 modules). `mi-plaits`
+is the template for a floating-point module (hardware-FPU Cortex-M4F/F3):
+its fidelity contract is different (see "`mi-plaits` status" below) — no
+bit-exact arithmetic to preserve, so the port is ordinary idiomatic Rust
+throughout.
 
 ## Scope of each crate
 
@@ -98,3 +102,14 @@ Ported and, except where noted above, **bit-verified** against
 
 Verification: `cargo test -p mi-braids --test equivalence` (47/48 shapes;
 `WaveLine` excluded, see above).
+
+## `mi-plaits` status
+
+Ported (22 of 24 engine models real, 2 documented silent stubs) — floating
+point, so no bit-exactness contract applies (see `crates/plaits/PORTING.md`
+for the full writeup, the deviations from the C, and why `Parameter
+Interpolator` needed a `Drop`-based redesign along the way).
+
+Verification: `cargo test -p mi-plaits --test smoke` (every engine slot
+renders a parameter sweep without panicking; no numerical-tolerance golden
+test yet — see the crate's `PORTING.md`).

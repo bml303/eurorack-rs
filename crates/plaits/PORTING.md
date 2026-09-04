@@ -1,169 +1,72 @@
 # Porting Plaits
 
-**Macro oscillator (24 synthesis + noise models)**  |  MCU family: `stm32f3`  |  ~21343 lines of hand-written C (excl. resources & drivers)
+**Macro oscillator, 24 synthesis models**  |  MCU family: `stm32f3` (hardware FPU)
 
-## Method
+## Status: ported, 22/24 models real
 
-Follow the `braids` crate as the worked example:
+Unlike `braids` (fixed-point, Cortex-M3, bit-exact port required), Plaits runs
+entirely in `f32` on a hardware FPU, so there is no fixed-point arithmetic to
+preserve verbatim -- the port follows ordinary idiomatic-Rust judgment
+throughout (methods instead of free functions, runtime parameters instead of
+C++ template parameters, `Option`/slices instead of nullable pointers). See
+`crates/plaits/src/lib.rs` and `crates/plaits/src/voice.rs` for the top-level
+docs on that and on the two deviations below.
 
-1. `python tools/transpile_resources.py ../eurorack/plaits/resources.cc \
-       ../eurorack/plaits/resources.h crates/plaits/src/resources.rs`
-2. Port `mi-stmlib` primitives this module needs (check its `#include`s) if not
-   already present.
-3. Translate the DSP files below. Preserve fixed-point arithmetic verbatim
-   (use `wrapping_*`); modernise *structure* only -- modules, methods, enums,
-   `match` instead of function-pointer tables.
-4. Add `examples/render_wav.rs` mirroring `plaits/test/*_test.cc` and diff the
-   output WAV against the C test with `tools/wav_diff.py`.
+All shared DSP infrastructure is ported: oscillators (`src/oscillator/`, 12
+files), noise (`src/noise/`), FX (`src/fx/`, including a hand-built
+`fx_engine.rs`/`Tap`/`FxContext` replacing the C++ template-metaprogrammed
+`FxEngine<size,format>::Reserve<N,...>` memory layout), physical modelling
+(`src/physical_modelling/`), the chord bank (`src/chords/`), the analog/
+synthetic drum voices (`src/drums/`), and the envelope/downsampler helpers.
+`stmlib` gained `filter` (`OnePole`/`Svf`/`NaiveSvf`/`DcBlocker`), `delay_line`,
+`hysteresis_quantizer`, `limiter`, `polyblep`, `rsqrt`, and a redesigned
+`ParameterInterpolator` (see below) to support it.
 
-## Source inventory (DSP + UI, drivers/bootloader/resources excluded)
+22 of the 24 `plaits/dsp/engine*` models are ported (`src/engines/`):
+virtual analog, waveshaping, FM, grain, additive, wavetable, chord, swarm,
+noise, particle, string, modal, bass drum, snare drum, hi-hat, virtual-analog
+VCF, phase distortion, wave terrain, string machine, and chiptune (with its
+own `arpeggiator.rs`). `SixOpEngine` (6-op DX7-style FM -- `plaits/dsp/fm/*`,
+~2000 lines) and `SpeechEngine` (LPC/SAM speech synthesis -- `plaits/dsp/
+speech/*`, ~3000 lines) are stubs that satisfy the `Engine` trait and render
+silence; they are by far the largest and most self-contained subsystems left
+out of this port. `src/voice.rs` wires all 24 slots (22 real + 2 stubs) into
+one `Voice::render()`, matching `plaits/dsp/voice.cc`'s engine registration,
+trigger/LPG/internal-envelope logic, and final limiter/low-pass-gate stage.
 
-| file | lines |
-|------|-------|
-| `plaits.cc` | 172 |
-| `pot_controller.h` | 174 |
-| `settings.cc` | 96 |
-| `settings.h` | 107 |
-| `ui.cc` | 593 |
-| `ui.h` | 163 |
-| `user_data.h` | 116 |
-| `user_data_receiver.cc` | 84 |
-| `user_data_receiver.h` | 189 |
-| `dsp/dsp.h` | 55 |
-| `dsp/envelope.h` | 130 |
-| `dsp/voice.cc` | 272 |
-| `dsp/voice.h` | 258 |
-| `dsp/downsampler/4x_downsampler.h` | 71 |
-| `dsp/drums/analog_bass_drum.h` | 195 |
-| `dsp/drums/analog_snare_drum.h` | 201 |
-| `dsp/drums/hi_hat.h` | 265 |
-| `dsp/drums/synthetic_bass_drum.h` | 248 |
-| `dsp/drums/synthetic_snare_drum.h` | 198 |
-| `dsp/fm/algorithms.cc` | 457 |
-| `dsp/fm/algorithms.h` | 214 |
-| `dsp/fm/dx_units.cc` | 115 |
-| `dsp/fm/dx_units.h` | 206 |
-| `dsp/fm/envelope.h` | 258 |
-| `dsp/fm/lfo.h` | 192 |
-| `dsp/fm/operator.h` | 138 |
-| `dsp/fm/patch.h` | 152 |
-| `dsp/fm/voice.h` | 288 |
-| `dsp/physical_modelling/delay_line.h` | 103 |
-| `dsp/physical_modelling/modal_voice.cc` | 100 |
-| `dsp/physical_modelling/modal_voice.h` | 68 |
-| `dsp/physical_modelling/resonator.cc` | 136 |
-| `dsp/physical_modelling/resonator.h` | 134 |
-| `dsp/physical_modelling/string.cc` | 190 |
-| `dsp/physical_modelling/string.h` | 97 |
-| `dsp/physical_modelling/string_voice.cc` | 113 |
-| `dsp/physical_modelling/string_voice.h` | 69 |
-| `dsp/engine/additive_engine.cc` | 151 |
-| `dsp/engine/additive_engine.h` | 73 |
-| `dsp/engine/bass_drum_engine.cc` | 96 |
-| `dsp/engine/bass_drum_engine.h` | 65 |
-| `dsp/engine/chord_engine.cc` | 172 |
-| `dsp/engine/chord_engine.h` | 74 |
-| `dsp/engine/engine.h` | 133 |
-| `dsp/engine/fm_engine.cc` | 123 |
-| `dsp/engine/fm_engine.h` | 69 |
-| `dsp/engine/grain_engine.cc` | 89 |
-| `dsp/engine/grain_engine.h` | 68 |
-| `dsp/engine/hi_hat_engine.cc` | 81 |
-| `dsp/engine/hi_hat_engine.h` | 63 |
-| `dsp/engine/modal_engine.cc` | 73 |
-| `dsp/engine/modal_engine.h` | 61 |
-| `dsp/engine/noise_engine.cc` | 102 |
-| `dsp/engine/noise_engine.h` | 70 |
-| `dsp/engine/particle_engine.cc` | 99 |
-| `dsp/engine/particle_engine.h` | 64 |
-| `dsp/engine/snare_drum_engine.cc` | 78 |
-| `dsp/engine/snare_drum_engine.h` | 61 |
-| `dsp/engine/speech_engine.cc` | 142 |
-| `dsp/engine/speech_engine.h` | 81 |
-| `dsp/engine/string_engine.cc` | 91 |
-| `dsp/engine/string_engine.h` | 66 |
-| `dsp/engine/swarm_engine.cc` | 86 |
-| `dsp/engine/swarm_engine.h` | 256 |
-| `dsp/engine/virtual_analog_engine.cc` | 245 |
-| `dsp/engine/virtual_analog_engine.h` | 72 |
-| `dsp/engine/waveshaping_engine.cc` | 137 |
-| `dsp/engine/waveshaping_engine.h` | 63 |
-| `dsp/engine/wavetable_engine.cc` | 219 |
-| `dsp/engine/wavetable_engine.h` | 80 |
-| `dsp/engine2/arpeggiator.h` | 133 |
-| `dsp/engine2/chiptune_engine.cc` | 128 |
-| `dsp/engine2/chiptune_engine.h` | 79 |
-| `dsp/engine2/phase_distortion_engine.cc` | 87 |
-| `dsp/engine2/phase_distortion_engine.h` | 62 |
-| `dsp/engine2/six_op_engine.cc` | 180 |
-| `dsp/engine2/six_op_engine.h` | 118 |
-| `dsp/engine2/string_machine_engine.cc` | 138 |
-| `dsp/engine2/string_machine_engine.h` | 70 |
-| `dsp/engine2/virtual_analog_vcf_engine.cc` | 131 |
-| `dsp/engine2/virtual_analog_vcf_engine.h` | 70 |
-| `dsp/engine2/wave_terrain_engine.cc` | 235 |
-| `dsp/engine2/wave_terrain_engine.h` | 75 |
-| `dsp/noise/clocked_noise.h` | 104 |
-| `dsp/noise/dust.h` | 48 |
-| `dsp/noise/fractal_random_generator.h` | 73 |
-| `dsp/noise/particle.h` | 93 |
-| `dsp/noise/smooth_random_generator.h` | 69 |
-| `dsp/oscillator/formant_oscillator.h` | 129 |
-| `dsp/oscillator/grainlet_oscillator.h` | 195 |
-| `dsp/oscillator/harmonic_oscillator.h` | 120 |
-| `dsp/oscillator/nes_triangle_oscillator.h` | 167 |
-| `dsp/oscillator/oscillator.h` | 254 |
-| `dsp/oscillator/sine_oscillator.h` | 254 |
-| `dsp/oscillator/string_synth_oscillator.h` | 179 |
-| `dsp/oscillator/super_square_oscillator.h` | 164 |
-| `dsp/oscillator/variable_saw_oscillator.h` | 165 |
-| `dsp/oscillator/variable_shape_oscillator.h` | 285 |
-| `dsp/oscillator/vosim_oscillator.h` | 139 |
-| `dsp/oscillator/wavetable_oscillator.h` | 190 |
-| `dsp/oscillator/z_oscillator.h` | 205 |
-| `dsp/speech/lpc_speech_synth.cc` | 163 |
-| `dsp/speech/lpc_speech_synth.h` | 110 |
-| `dsp/speech/lpc_speech_synth_controller.cc` | 335 |
-| `dsp/speech/lpc_speech_synth_controller.h` | 197 |
-| `dsp/speech/lpc_speech_synth_phonemes.cc` | 126 |
-| `dsp/speech/lpc_speech_synth_words.cc` | 1573 |
-| `dsp/speech/lpc_speech_synth_words.h` | 48 |
-| `dsp/speech/naive_speech_synth.cc` | 160 |
-| `dsp/speech/naive_speech_synth.h` | 85 |
-| `dsp/speech/sam_speech_synth.cc` | 185 |
-| `dsp/speech/sam_speech_synth.h` | 90 |
-| `dsp/chords/chord_bank.cc` | 154 |
-| `dsp/chords/chord_bank.h` | 111 |
-| `dsp/fx/diffuser.h` | 108 |
-| `dsp/fx/ensemble.h` | 136 |
-| `dsp/fx/fx_engine.h` | 300 |
-| `dsp/fx/low_pass_gate.h` | 92 |
-| `dsp/fx/overdrive.h` | 83 |
-| `dsp/fx/sample_rate_reducer.h` | 136 |
-| `test/plaits_test.cc` | 1339 |
-| `drivers/audio_dac.cc` | 132 |
-| `drivers/audio_dac.h` | 73 |
-| `drivers/cv_adc.cc` | 193 |
-| `drivers/cv_adc.h` | 74 |
-| `drivers/debug_pin.h` | 72 |
-| `drivers/debug_port.cc` | 62 |
-| `drivers/debug_port.h` | 67 |
-| `drivers/firmware_update_adc.cc` | 111 |
-| `drivers/firmware_update_adc.h` | 60 |
-| `drivers/leds.cc` | 114 |
-| `drivers/leds.h` | 72 |
-| `drivers/normalization_probe.h` | 87 |
-| `drivers/pots_adc.cc` | 111 |
-| `drivers/pots_adc.h` | 71 |
-| `drivers/switches.cc` | 72 |
-| `drivers/switches.h` | 82 |
+## A necessary design fix along the way: `ParameterInterpolator`
 
-## Resources
+The C's `ParameterInterpolator` is RAII: its destructor writes the ramped
+value back through a `float*` it was constructed with. `stmlib::
+ParameterInterpolator` (originally written for `braids`, which doesn't use
+it) was redesigned to hold `&'a mut f32` and implement `Drop` to do that
+write-back automatically -- the natural Rust translation of a C++ destructor
+side effect, and the one used throughout this crate. `Downsampler` follows
+the same pattern.
 
-`plaits/resources.cc` (10548 lines of generated lookup tables) -> transpile with `tools/transpile_resources.py` into `src/resources.rs`, exactly as done for `braids`.
+## Verification
 
-## Not in scope for the library crate
+`tests/smoke.rs` renders every one of the 24 engine slots across a parameter
+sweep (harmonics/timbre/morph, note, periodic triggers) and asserts only that
+`Voice::render` never panics -- there is no bit-exact or numerical-tolerance
+golden test here (unlike `braids`'s CRC32 equivalence test), since floating-
+point non-determinism across compilers/optimization levels makes a tight
+tolerance-based comparison to the C reference a separate, larger undertaking
+than this port itself.
 
-STM32/AVR peripheral drivers (`drivers/`), the audio bootloader, and the
-`hardware_design/` files stay in the C repo -- the Rust crate is a `no_std`
-DSP library that a host or an embedded HAL feeds.
+## Deviations from the C (see also `src/voice.rs`'s module doc)
+
+* `Engine::load_user_data` always receives `None` -- nothing in this
+  workspace wires flash storage into `Voice`, so the C's `UserData::
+  ptr(engine_index)` / `fm_patches_table[]` fallback lookups never fire. This
+  only matters for the two stub engines and the wavetable/wave-terrain
+  engines' optional user tables.
+* `SixOpEngine` is registered 3 times in the C (engine slots 2-4) against a
+  single shared instance, differentiated only by which FM patch bank
+  `LoadUserData` gave it; since it's a silent stub here, the three slots are
+  behaviorally identical.
+* `Voice`'s 1ms trigger-delay line uses `stmlib::DelayLine` (const-generic,
+  owns its buffer) rather than the C's non-owning `plaits::DelayLine` variant
+  that takes an external buffer pointer in `Init()` -- functionally
+  equivalent, just a different (Rust-idiomatic) ownership model for the same
+  fixed-size ring buffer.

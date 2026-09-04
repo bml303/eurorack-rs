@@ -1,6 +1,6 @@
 [package]
 name = "mi-plaits"
-description = "Rust port of Mutable Instruments Plaits (Macro oscillator (24 synthesis + noise models)). SCAFFOLD -- DSP not yet ported."
+description = "Rust port of Mutable Instruments Plaits (24-model macro oscillator)."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -13,3 +13,4 @@ path = "src/lib.rs"
 
 [dependencies]
 mi-stmlib.workspace = true
+libm = "0.2"

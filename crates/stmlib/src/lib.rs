@@ -19,21 +19,30 @@
 #![allow(clippy::excessive_precision)]
 
 pub mod cosine_oscillator;
+pub mod delay_line;
 pub mod fdsp;
+pub mod filter;
 pub mod fixed;
 pub mod gate_flags;
+pub mod hysteresis_quantizer;
+pub mod limiter;
 pub mod parameter_interpolator;
+pub mod polyblep;
 pub mod random;
+pub mod rsqrt;
 pub mod units;
 
 mod units_lut;
 
 pub use cosine_oscillator::{CosineOscillator, CosineOscillatorMode};
+pub use delay_line::DelayLine;
 pub use fixed::{
     crossfade, crossfade_u8, interpolate_1022, interpolate_115, interpolate_824_i16,
     interpolate_824_u16, interpolate_824_u8, interpolate_88_i16, interpolate_88_u16, mix_i16,
     mix_u16,
 };
+pub use hysteresis_quantizer::{HysteresisQuantizer, HysteresisQuantizer2};
+pub use limiter::Limiter;
 pub use parameter_interpolator::ParameterInterpolator;
 pub use random::Random;
 
