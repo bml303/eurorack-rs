@@ -1,0 +1,15 @@
+[package]
+name = "mi-edges"
+description = "Rust port of Mutable Instruments Edges (Quad chiptune digital oscillator). SCAFFOLD -- DSP not yet ported."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[lib]
+name = "edges"
+path = "src/lib.rs"
+
+[dependencies]
+mi-stmlib.workspace = true

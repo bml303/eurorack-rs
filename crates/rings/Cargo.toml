@@ -1,0 +1,15 @@
+[package]
+name = "mi-rings"
+description = "Rust port of Mutable Instruments Rings (Modal / sympathetic-string resonator). SCAFFOLD -- DSP not yet ported."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[lib]
+name = "rings"
+path = "src/lib.rs"
+
+[dependencies]
+mi-stmlib.workspace = true

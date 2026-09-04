@@ -1,0 +1,15 @@
+[package]
+name = "mi-peaks"
+description = "Rust port of Mutable Instruments Peaks (Dual function generator (envelopes, LFOs, drums)). SCAFFOLD -- DSP not yet ported."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[lib]
+name = "peaks"
+path = "src/lib.rs"
+
+[dependencies]
+mi-stmlib.workspace = true

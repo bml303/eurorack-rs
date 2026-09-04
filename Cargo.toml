@@ -1,0 +1,42 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/stmlib",
+    "crates/braids",
+    "crates/branches",
+    "crates/clouds",
+    "crates/edges",
+    "crates/elements",
+    "crates/frames",
+    "crates/grids",
+    "crates/marbles",
+    "crates/peaks",
+    "crates/plaits",
+    "crates/rings",
+    "crates/stages",
+    "crates/streams",
+    "crates/tides",
+    "crates/tides2",
+    "crates/warps",
+    "crates/yarns",
+]
+
+[workspace.package]
+version = "0.0.1"
+edition = "2021"
+license = "MIT OR GPL-3.0-or-later"
+repository = "https://github.com/pichenettes/eurorack"
+authors = ["Ported from Mutable Instruments code by Emilie Gillet"]
+
+[workspace.dependencies]
+mi-stmlib = { path = "crates/stmlib" }
+
+# Faithful fixed-point ports rely on C-style wrapping integer arithmetic.
+# Overflow checks would panic on perfectly legal wrap-around, so disable them
+# even in dev builds. Correctness against the C reference is enforced by tests.
+[profile.dev]
+overflow-checks = false
+
+[profile.release]
+overflow-checks = false
+lto = true

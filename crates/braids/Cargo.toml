@@ -1,0 +1,15 @@
+[package]
+name = "mi-braids"
+description = "Rust port of Mutable Instruments Braids macro-oscillator."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[lib]
+name = "braids"
+path = "src/lib.rs"
+
+[dependencies]
+mi-stmlib.workspace = true

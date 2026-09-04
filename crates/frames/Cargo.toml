@@ -1,0 +1,15 @@
+[package]
+name = "mi-frames"
+description = "Rust port of Mutable Instruments Frames (Keyframer / mixer). SCAFFOLD -- DSP not yet ported."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[lib]
+name = "frames"
+path = "src/lib.rs"
+
+[dependencies]
+mi-stmlib.workspace = true

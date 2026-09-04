@@ -1,0 +1,15 @@
+[package]
+name = "mi-stmlib"
+description = "Idiomatic Rust port of Mutable Instruments' shared DSP library (stmlib)."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[lib]
+name = "stmlib"
+path = "src/lib.rs"
+
+[dependencies]
+libm = "0.2"

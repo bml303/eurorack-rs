@@ -1,0 +1,15 @@
+[package]
+name = "mi-warps"
+description = "Rust port of Mutable Instruments Warps (Meta-modulator (cross-modulation, vocoder)). SCAFFOLD -- DSP not yet ported."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[lib]
+name = "warps"
+path = "src/lib.rs"
+
+[dependencies]
+mi-stmlib.workspace = true

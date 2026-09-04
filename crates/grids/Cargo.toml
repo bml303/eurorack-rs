@@ -1,0 +1,15 @@
+[package]
+name = "mi-grids"
+description = "Rust port of Mutable Instruments Grids (Topographic drum sequencer). SCAFFOLD -- DSP not yet ported."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[lib]
+name = "grids"
+path = "src/lib.rs"
+
+[dependencies]
+mi-stmlib.workspace = true
