@@ -40,6 +40,7 @@ pub mod noise;
 pub mod oscillator;
 pub mod physical_modelling;
 pub mod resources;
+pub mod speech;
 pub mod utils;
 pub mod voice;
 

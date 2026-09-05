@@ -1,8 +1,3 @@
-//! Utility functions.
-//!
-//! This module contains ports of functions that were used in several Mutable Instruments
-//! devices in common and were made for the STM32 platform.
-
 pub mod atan;
 pub mod cosine_oscillator;
 pub mod delay_line;
