@@ -13,7 +13,7 @@ pub enum ArpeggiatorMode {
     Random,
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct Arpeggiator {
     mode: ArpeggiatorMode,
     range: i32,
@@ -104,11 +104,19 @@ impl Arpeggiator {
                 self.note = if self.direction > 0 { 0 } else { num_notes - 1 };
             }
             if self.octave >= self.range || self.octave < 0 {
-                self.octave = if self.direction > 0 { 0 } else { self.range - 1 };
+                self.octave = if self.direction > 0 {
+                    0
+                } else {
+                    self.range - 1
+                };
                 if self.mode == ArpeggiatorMode::UpDown {
                     self.direction = -self.direction;
                     self.note = if self.direction > 0 { 1 } else { num_notes - 2 };
-                    self.octave = if self.direction > 0 { 0 } else { self.range - 1 };
+                    self.octave = if self.direction > 0 {
+                        0
+                    } else {
+                        self.range - 1
+                    };
                     done = false;
                 }
             }

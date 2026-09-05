@@ -1,16 +1,22 @@
 //! `plaits/dsp/engine/noise_engine.h` -- two clocked-noise sources through a
 //! multimode (LP<->HP) filter and a pair of band-pass filters.
 
+extern crate alloc;
+
+use alloc::boxed::Box;
+use alloc::vec;
+
 use stmlib::fdsp::sqrt;
 use stmlib::filter::{FilterMode, FrequencyApproximation, Svf};
 use stmlib::parameter_interpolator::ParameterInterpolator;
 use stmlib::units::semitones_to_ratio;
 
-use crate::dsp::MAX_BLOCK_SIZE;
-use crate::engine::{note_to_frequency, trigger_state, Engine, EngineParameters, PostProcessingSettings};
+use crate::engine::{
+    note_to_frequency, trigger_state, Engine, EngineParameters, PostProcessingSettings,
+};
 use crate::noise::ClockedNoise;
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct NoiseEngine {
     clocked_noise: [ClockedNoise; 2],
     lp_hp_filter: Svf,
@@ -19,7 +25,22 @@ pub struct NoiseEngine {
     previous_f1: f32,
     previous_q: f32,
     previous_mode: f32,
-    temp_buffer: [f32; MAX_BLOCK_SIZE],
+    temp_buffer: Box<[f32]>,
+}
+
+impl NoiseEngine {
+    pub fn new(block_size: usize) -> Self {
+        Self {
+            clocked_noise: [ClockedNoise::default(), ClockedNoise::default()],
+            lp_hp_filter: Svf::default(),
+            bp_filter: [Svf::default(), Svf::default()],
+            previous_f0: 0.0,
+            previous_f1: 0.0,
+            previous_q: 0.0,
+            previous_mode: 0.0,
+            temp_buffer: vec![0.0; block_size].into_boxed_slice(),
+        }
+    }
 }
 
 impl Engine for NoiseEngine {
@@ -54,7 +75,8 @@ impl Engine for NoiseEngine {
         } else {
             -24.0
         };
-        let clock_f = note_to_frequency(parameters.timbre * (128.0 - clock_lowest_note) + clock_lowest_note);
+        let clock_f =
+            note_to_frequency(parameters.timbre * (128.0 - clock_lowest_note) + clock_lowest_note);
         let q = 0.5 * semitones_to_ratio(parameters.morph * 120.0);
         let sync = parameters.trigger & trigger_state::RISING_EDGE != 0;
 
@@ -64,14 +86,16 @@ impl Engine for NoiseEngine {
         let mut f0_modulation = ParameterInterpolator::new(&mut self.previous_f0, f0, size);
         let mut f1_modulation = ParameterInterpolator::new(&mut self.previous_f1, f1, size);
         let mut q_modulation = ParameterInterpolator::new(&mut self.previous_q, q, size);
-        let mut mode_modulation = ParameterInterpolator::new(&mut self.previous_mode, parameters.harmonics, size);
+        let mut mode_modulation =
+            ParameterInterpolator::new(&mut self.previous_mode, parameters.harmonics, size);
 
         for i in 0..size {
             let f0 = f0_modulation.next();
             let f1 = f1_modulation.next();
             let q = q_modulation.next();
             let gain = 1.0 / sqrt((0.5 + q) * 40.0 * f0);
-            self.lp_hp_filter.set_f_q(f0, q, FrequencyApproximation::Accurate);
+            self.lp_hp_filter
+                .set_f_q(f0, q, FrequencyApproximation::Accurate);
             self.bp_filter[0].set_f_q(f0, q, FrequencyApproximation::Accurate);
             self.bp_filter[1].set_f_q(f1, q, FrequencyApproximation::Accurate);
 
@@ -80,8 +104,11 @@ impl Engine for NoiseEngine {
 
             let in_arr = [input_1];
             let mut out_arr = [0.0f32];
-            self.lp_hp_filter
-                .process_multimode_lp_to_hp(&in_arr, &mut out_arr, mode_modulation.next());
+            self.lp_hp_filter.process_multimode_lp_to_hp(
+                &in_arr,
+                &mut out_arr,
+                mode_modulation.next(),
+            );
             out[i] = out_arr[0];
 
             aux[i] = self.bp_filter[0].process(FilterMode::BandPass, input_1)

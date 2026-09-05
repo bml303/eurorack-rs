@@ -4,12 +4,15 @@
 use stmlib::filter::{FilterMode, FrequencyApproximation, Svf};
 use stmlib::units::semitones_to_ratio;
 
-use crate::engine::{note_to_frequency, trigger_state, Engine, EngineParameters, PostProcessingSettings};
+use crate::engine::{
+    note_to_frequency, trigger_state, Engine, EngineParameters, PostProcessingSettings,
+};
 use crate::fx::Diffuser;
 use crate::noise::Particle;
 
 const NUM_PARTICLES: usize = 6;
 
+#[derive(Debug)]
 pub struct ParticleEngine {
     particle: [Particle; NUM_PARTICLES],
     diffuser: Diffuser,
@@ -61,7 +64,11 @@ impl Engine for ParticleEngine {
         let spread = 48.0 * parameters.harmonics * parameters.harmonics;
         let raw_diffusion_sqrt = 2.0 * (parameters.morph - 0.5).abs();
         let raw_diffusion = raw_diffusion_sqrt * raw_diffusion_sqrt;
-        let diffusion = if parameters.morph < 0.5 { raw_diffusion } else { 0.0 };
+        let diffusion = if parameters.morph < 0.5 {
+            raw_diffusion
+        } else {
+            0.0
+        };
         let sync = parameters.trigger & trigger_state::RISING_EDGE != 0;
 
         out.fill(0.0);
@@ -71,10 +78,12 @@ impl Engine for ParticleEngine {
             p.render(sync, density, gain, f0, spread, q, out, aux);
         }
 
-        self.post_filter.set_f_q(f0.min(0.49), 0.5, FrequencyApproximation::Dirty);
+        self.post_filter
+            .set_f_q(f0.min(0.49), 0.5, FrequencyApproximation::Dirty);
         self.post_filter.process_in_place(FilterMode::LowPass, out);
 
-        self.diffuser.process(0.8 * diffusion * diffusion, 0.5 * diffusion + 0.25, out);
+        self.diffuser
+            .process(0.8 * diffusion * diffusion, 0.5 * diffusion + 0.25, out);
         already_enveloped
     }
 

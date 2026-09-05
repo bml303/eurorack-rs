@@ -18,19 +18,22 @@
 //!   `LoadUserData` gave it) collapse to the same stub with no behavioral
 //!   difference between the three slots -- see the deviation above.
 
+use log::*;
 use stmlib::units::semitones_to_ratio;
 use stmlib::{DelayLine, HysteresisQuantizer2, Limiter};
 
-use crate::dsp::{BLOCK_SIZE, MAX_BLOCK_SIZE, SAMPLE_RATE};
+use crate::dsp::INV_SAMPLE_RATE;
 use crate::engine::{note_to_frequency, trigger_state, Engine, EngineParameters};
 use crate::engines::{
-    AdditiveEngine, BassDrumEngine, ChiptuneEngine, ChordEngine, FmEngine, GrainEngine, HiHatEngine,
-    ModalEngine, NoiseEngine, ParticleEngine, PhaseDistortionEngine, SixOpEngine, SnareDrumEngine,
-    SpeechEngine, StringEngine, StringMachineEngine, SwarmEngine, VirtualAnalogEngine,
-    VirtualAnalogVcfEngine, WaveTerrainEngine, WavetableEngine, WaveshapingEngine,
+    AdditiveEngine, BassDrumEngine, ChiptuneEngine, ChordEngine, FmEngine, GrainEngine,
+    HiHatEngine, ModalEngine, NoiseEngine, ParticleEngine, PhaseDistortionEngine, SixOpEngine,
+    SnareDrumEngine, SpeechEngine, StringEngine, StringMachineEngine, SwarmEngine,
+    VirtualAnalogEngine, VirtualAnalogVcfEngine, WaveTerrainEngine, WaveshapingEngine,
+    WavetableEngine,
 };
 use crate::envelope::{DecayEnvelope, LpgEnvelope};
 use crate::fx::LowPassGate;
+use crate::PostProcessingSettings;
 
 pub const MAX_ENGINES: usize = 24;
 pub const MAX_TRIGGER_DELAY: usize = 8;
@@ -44,7 +47,7 @@ pub struct Frame {
 }
 
 /// The final gain/limiter/LPG stage for one of the two output channels.
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct ChannelPostProcessor {
     limiter: Limiter,
     lpg: LowPassGate,
@@ -68,6 +71,34 @@ impl ChannelPostProcessor {
         low_pass_gate_gain: f32,
         low_pass_gate_frequency: f32,
         low_pass_gate_hf_bleed: f32,
+        in_out: &mut [f32],
+    ) {
+        if gain < 0.0 {
+            self.limiter.process(-gain, in_out);
+        }
+        let post_gain = (if gain < 0.0 { 1.0 } else { gain }) * -32767.0;
+        if !bypass_lpg {
+            self.lpg.process(
+                post_gain * low_pass_gate_gain,
+                low_pass_gate_frequency,
+                low_pass_gate_hf_bleed,
+                in_out,
+            );
+        } else {
+            for o in in_out.iter_mut() {
+                *o *= post_gain;
+            }
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn process_i16(
+        &mut self,
+        gain: f32,
+        bypass_lpg: bool,
+        low_pass_gate_gain: f32,
+        low_pass_gate_frequency: f32,
+        low_pass_gate_hf_bleed: f32,
         input: &mut [f32],
         out: &mut [i16],
     ) {
@@ -76,8 +107,14 @@ impl ChannelPostProcessor {
         }
         let post_gain = (if gain < 0.0 { 1.0 } else { gain }) * -32767.0;
         if !bypass_lpg {
-            self.lpg
-                .process_to_i16(post_gain * low_pass_gate_gain, low_pass_gate_frequency, low_pass_gate_hf_bleed, input, out, 1);
+            self.lpg.process_to_i16(
+                post_gain * low_pass_gate_gain,
+                low_pass_gate_frequency,
+                low_pass_gate_hf_bleed,
+                input,
+                out,
+                1,
+            );
         } else {
             for (o, &x) in out.iter_mut().zip(input.iter()) {
                 *o = stmlib::fdsp::clip16(1 + (x * post_gain) as i32) as i16;
@@ -86,7 +123,7 @@ impl ChannelPostProcessor {
     }
 }
 
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy)]
 pub struct Patch {
     pub note: f32,
     pub harmonics: f32,
@@ -99,6 +136,23 @@ pub struct Patch {
     pub engine: i32,
     pub decay: f32,
     pub lpg_colour: f32,
+}
+
+impl Default for Patch {
+    fn default() -> Self {
+        Self {
+            note: 48.0,
+            harmonics: 0.5,
+            timbre: 0.5,
+            morph: 0.5,
+            frequency_modulation_amount: 0.0,
+            timbre_modulation_amount: 0.0,
+            morph_modulation_amount: 0.0,
+            engine: 0,
+            decay: 0.5,
+            lpg_colour: 0.5,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -148,6 +202,7 @@ fn apply_modulations(
     value.clamp(minimum_value, maximum_value)
 }
 
+#[derive(Default, Debug)]
 pub struct Voice {
     virtual_analog_engine: VirtualAnalogEngine,
     waveshaping_engine: WaveshapingEngine,
@@ -190,13 +245,12 @@ pub struct Voice {
 
     out_post_processor: ChannelPostProcessor,
     aux_post_processor: ChannelPostProcessor,
-
 }
 
-impl Default for Voice {
-    fn default() -> Self {
+impl Voice {
+    pub fn new(block_size: usize) -> Self {
         Self {
-            virtual_analog_engine: VirtualAnalogEngine::default(),
+            virtual_analog_engine: VirtualAnalogEngine::new(block_size),
             waveshaping_engine: WaveshapingEngine::default(),
             fm_engine: FmEngine::default(),
             grain_engine: GrainEngine::default(),
@@ -206,18 +260,18 @@ impl Default for Voice {
             speech_engine: SpeechEngine::default(),
 
             swarm_engine: SwarmEngine::default(),
-            noise_engine: NoiseEngine::default(),
+            noise_engine: NoiseEngine::new(block_size),
             particle_engine: ParticleEngine::default(),
-            string_engine: StringEngine::default(),
-            modal_engine: ModalEngine::default(),
+            string_engine: StringEngine::new(block_size),
+            modal_engine: ModalEngine::new(block_size),
             bass_drum_engine: BassDrumEngine::default(),
             snare_drum_engine: SnareDrumEngine::default(),
-            hi_hat_engine: HiHatEngine::default(),
+            hi_hat_engine: HiHatEngine::new(block_size),
 
             virtual_analog_vcf_engine: VirtualAnalogVcfEngine::default(),
-            phase_distortion_engine: PhaseDistortionEngine::default(),
+            phase_distortion_engine: PhaseDistortionEngine::new(block_size),
             six_op_engine: SixOpEngine::default(),
-            wave_terrain_engine: WaveTerrainEngine::default(),
+            wave_terrain_engine: WaveTerrainEngine::new(block_size),
             string_machine_engine: StringMachineEngine::default(),
             chiptune_engine: ChiptuneEngine::default(),
 
@@ -237,12 +291,9 @@ impl Default for Voice {
 
             out_post_processor: ChannelPostProcessor::default(),
             aux_post_processor: ChannelPostProcessor::default(),
-
         }
     }
-}
 
-impl Voice {
     /// Engine-index -> concrete engine dispatch (the Rust equivalent of the
     /// C's `EngineRegistry<24>`, whose `RegisterInstance` calls set up this
     /// exact same index -> instance mapping).
@@ -325,9 +376,13 @@ impl Voice {
         self.previous_engine_index
     }
 
-    pub fn render(&mut self, patch: &Patch, modulations: &Modulations, frames: &mut [Frame]) {
-        let size = frames.len();
-
+    fn render_internal(
+        &mut self,
+        patch: &Patch,
+        modulations: &Modulations,
+        out: &mut [f32],
+        aux: &mut [f32],
+    ) -> (PostProcessingSettings, bool) {
         // Delay trigger by 1ms to deal with sequencers or MIDI interfaces
         // whose CV out lags behind the GATE out.
         self.trigger_delay.write(modulations.trigger);
@@ -351,7 +406,9 @@ impl Voice {
         }
 
         // Engine selection.
-        let engine_index = self.engine_quantizer.process_base(patch.engine, self.engine_cv);
+        let engine_index = self
+            .engine_quantizer
+            .process_base(patch.engine, self.engine_cv);
 
         if engine_index != self.previous_engine_index || self.reload_user_data {
             // No flash-backed user-data source is wired into this port (see
@@ -371,19 +428,29 @@ impl Voice {
         self.previous_note = modulations.note;
 
         if modulations.trigger_patched {
-            p.trigger = (if rising_edge { trigger_state::RISING_EDGE } else { trigger_state::LOW })
-                | (if self.trigger_state { trigger_state::HIGH } else { trigger_state::LOW });
+            p.trigger = if rising_edge {
+                trigger_state::RISING_EDGE
+            } else if self.trigger_state {
+                trigger_state::HIGH
+            } else {
+                trigger_state::LOW
+            };
         } else {
             p.trigger = trigger_state::UNPATCHED;
         }
 
-        let short_decay =
-            (200.0 * BLOCK_SIZE as f32) / SAMPLE_RATE * semitones_to_ratio(-96.0 * patch.decay);
-
+        let short_decay = (200.0 * out.len() as f32)
+            * INV_SAMPLE_RATE
+            * semitones_to_ratio(-96.0 * patch.decay.clamp(0.1, 1.0));
         self.decay_envelope.process(short_decay * 2.0);
 
-        let compressed_level = (1.3 * modulations.level / (0.3 + modulations.level.abs())).clamp(0.0, 1.0);
-        p.accent = if modulations.level_patched { compressed_level } else { 0.8 };
+        let compressed_level =
+            (1.3 * modulations.level / (0.3 + modulations.level.abs())).clamp(0.0, 1.0);
+        p.accent = if modulations.level_patched {
+            compressed_level
+        } else {
+            0.8
+        };
 
         let use_internal_envelope = modulations.trigger_patched;
 
@@ -413,7 +480,8 @@ impl Voice {
                 // Disable internal envelope on TIMBRE, and enable the
                 // envelope generator built into the chiptune engine.
                 internal_envelope_amplitude_timbre = 0.0;
-                self.chiptune_engine.set_envelope_shape(patch.timbre_modulation_amount);
+                self.chiptune_engine
+                    .set_envelope_shape(patch.timbre_modulation_amount);
             } else {
                 self.chiptune_engine
                     .set_envelope_shape(crate::engines::chiptune_engine::NO_ENVELOPE);
@@ -426,7 +494,10 @@ impl Voice {
             modulations.frequency_patched,
             modulations.frequency,
             use_internal_envelope,
-            internal_envelope_amplitude * self.decay_envelope.value() * self.decay_envelope.value() * 48.0,
+            internal_envelope_amplitude
+                * self.decay_envelope.value()
+                * self.decay_envelope.value()
+                * 48.0,
             1.0,
             -119.0,
             120.0,
@@ -456,33 +527,46 @@ impl Voice {
             1.0,
         );
 
-        let pp_s = self.engine_mut(engine_index).post_processing_settings();
-        let mut out_buffer = [0.0f32; MAX_BLOCK_SIZE];
-        let mut aux_buffer = [0.0f32; MAX_BLOCK_SIZE];
-        let out = &mut out_buffer[..size];
-        let aux = &mut aux_buffer[..size];
-        let already_enveloped = self.engine_mut(engine_index).render(&p, out, aux, pp_s.already_enveloped);
+        let pp_s: PostProcessingSettings = self.engine_mut(engine_index).post_processing_settings();
 
-        let lpg_bypass = already_enveloped || (!modulations.level_patched && !modulations.trigger_patched);
+        let already_enveloped =
+            self.engine_mut(engine_index)
+                .render(&p, out, aux, pp_s.already_enveloped);
+
+        let lpg_bypass =
+            already_enveloped || (!modulations.level_patched && !modulations.trigger_patched);
 
         // Compute LPG parameters.
         if !lpg_bypass {
             let hf = patch.lpg_colour;
-            let decay_tail =
-                (20.0 * BLOCK_SIZE as f32) / SAMPLE_RATE * semitones_to_ratio(-72.0 * patch.decay + 12.0 * hf) - short_decay;
+            let decay_tail = (20.0 * out.len() as f32)
+                * INV_SAMPLE_RATE
+                * semitones_to_ratio(-72.0 * patch.decay + 12.0 * hf)
+                - short_decay;
 
             if modulations.level_patched {
-                self.lpg_envelope.process_lp(compressed_level, short_decay, decay_tail, hf);
+                self.lpg_envelope
+                    .process_lp(compressed_level, short_decay, decay_tail, hf);
             } else {
-                let attack = note_to_frequency(p.note) * BLOCK_SIZE as f32 * 2.0;
-                self.lpg_envelope.process_ping(attack, short_decay, decay_tail, hf);
+                let attack = note_to_frequency(p.note) * out.len() as f32 * 2.0;
+                self.lpg_envelope
+                    .process_ping(attack, short_decay, decay_tail, hf);
             }
         } else {
             self.lpg_envelope.init();
         }
 
-        let mut out_i16 = [0i16; MAX_BLOCK_SIZE];
-        let mut aux_i16 = [0i16; MAX_BLOCK_SIZE];
+        (pp_s, lpg_bypass)
+    }
+
+    pub fn render(
+        &mut self,
+        patch: &Patch,
+        modulations: &Modulations,
+        out_buffer: &mut [f32],
+        aux_buffer: &mut [f32],
+    ) {
+        let (pp_s, lpg_bypass) = self.render_internal(patch, modulations, out_buffer, aux_buffer);
 
         self.out_post_processor.process(
             pp_s.out_gain,
@@ -490,8 +574,7 @@ impl Voice {
             self.lpg_envelope.gain(),
             self.lpg_envelope.frequency(),
             self.lpg_envelope.hf_bleed(),
-            &mut out_buffer[..size],
-            &mut out_i16[..size],
+            out_buffer,
         );
 
         self.aux_post_processor.process(
@@ -500,13 +583,56 @@ impl Voice {
             self.lpg_envelope.gain(),
             self.lpg_envelope.frequency(),
             self.lpg_envelope.hf_bleed(),
-            &mut aux_buffer[..size],
-            &mut aux_i16[..size],
+            aux_buffer,
         );
+    }
 
+    pub fn render_frames(
+        &mut self,
+        patch: &Patch,
+        modulations: &Modulations,
+        out_buffer: &mut [f32],
+        aux_buffer: &mut [f32],
+        out_i16: &mut [i16],
+        aux_i16: &mut [i16],
+        frames: &mut [Frame],
+    ) {
+        self.render_i16(patch, modulations, out_buffer, aux_buffer, out_i16, aux_i16);
         for (frame, (&o, &a)) in frames.iter_mut().zip(out_i16.iter().zip(aux_i16.iter())) {
             frame.out = o;
             frame.aux = a;
         }
+    }
+
+    pub fn render_i16(
+        &mut self,
+        patch: &Patch,
+        modulations: &Modulations,
+        out_buffer: &mut [f32],
+        aux_buffer: &mut [f32],
+        out_i16: &mut [i16],
+        aux_i16: &mut [i16],
+    ) {
+        let (pp_s, lpg_bypass) = self.render_internal(patch, modulations, out_buffer, aux_buffer);
+
+        self.out_post_processor.process_i16(
+            pp_s.out_gain,
+            lpg_bypass,
+            self.lpg_envelope.gain(),
+            self.lpg_envelope.frequency(),
+            self.lpg_envelope.hf_bleed(),
+            out_buffer,
+            out_i16,
+        );
+
+        self.aux_post_processor.process_i16(
+            pp_s.aux_gain,
+            lpg_bypass,
+            self.lpg_envelope.gain(),
+            self.lpg_envelope.frequency(),
+            self.lpg_envelope.hf_bleed(),
+            aux_buffer,
+            aux_i16,
+        );
     }
 }

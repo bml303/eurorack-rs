@@ -9,7 +9,7 @@ use stmlib::Random;
 
 use crate::dsp::SAMPLE_RATE;
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct SyntheticSnareDrum {
     phase: [f32; 2],
     drum_amplitude: f32,
@@ -53,7 +53,8 @@ impl SyntheticSnareDrum {
         let drum_decay = 1.0
             - 1.0 / (0.015 * SAMPLE_RATE)
                 * semitones_to_ratio(-decay_xt * 72.0 - fm_amount * 12.0 + snappy * 7.0);
-        let snare_decay = 1.0 - 1.0 / (0.01 * SAMPLE_RATE) * semitones_to_ratio(-decay * 60.0 - snappy * 7.0);
+        let snare_decay =
+            1.0 - 1.0 / (0.01 * SAMPLE_RATE) * semitones_to_ratio(-decay * 60.0 - snappy * 7.0);
         let fm_decay = 1.0 - 1.0 / (0.007 * SAMPLE_RATE);
 
         let snappy = (snappy * 1.1 - 0.05).clamp(0.0, 1.0);
@@ -64,8 +65,13 @@ impl SyntheticSnareDrum {
         let snare_f_min = (10.0 * f0).min(0.5);
         let snare_f_max = (35.0 * f0).min(0.5);
 
-        self.snare_hp.set_f(snare_f_min, FrequencyApproximation::Fast);
-        self.snare_lp.set_f_q(snare_f_max, 0.5 + 2.0 * snappy, FrequencyApproximation::Fast);
+        self.snare_hp
+            .set_f(snare_f_min, FrequencyApproximation::Fast);
+        self.snare_lp.set_f_q(
+            snare_f_max,
+            0.5 + 2.0 * snappy,
+            FrequencyApproximation::Fast,
+        );
         self.drum_lp.set_f(3.0 * f0, FrequencyApproximation::Fast);
 
         if trigger {
@@ -78,7 +84,8 @@ impl SyntheticSnareDrum {
         }
 
         let block_size = out.len();
-        let mut sustain_gain = ParameterInterpolator::new(&mut self.sustain_gain, accent * decay, block_size);
+        let mut sustain_gain =
+            ParameterInterpolator::new(&mut self.sustain_gain, accent * decay, block_size);
 
         // Mirrors the C's `while (size--)`: `size` is the remaining-samples
         // countdown (its parity gates the drum decay below), not a forward index.

@@ -8,9 +8,13 @@
 //! on `out`, and a hard-synced dual variable-waveshape pair (detuned by
 //! HARMONICS, sync'ed by TIMBRE) on `aux`.
 
+extern crate alloc;
+
+use alloc::boxed::Box;
+use alloc::vec;
+
 use stmlib::parameter_interpolator::ParameterInterpolator;
 
-use crate::dsp::MAX_BLOCK_SIZE;
 use crate::engine::{note_to_frequency, Engine, EngineParameters, PostProcessingSettings};
 use crate::oscillator::{VariableSawOscillator, VariableShapeOscillator};
 
@@ -34,6 +38,7 @@ fn compute_detuning(detune: f32) -> f32 {
     (a + (b - a) * squash(squash(detune_fractional))) * sign
 }
 
+#[derive(Default, Debug)]
 pub struct VirtualAnalogEngine {
     primary: VariableShapeOscillator,
     auxiliary: VariableShapeOscillator,
@@ -41,11 +46,11 @@ pub struct VirtualAnalogEngine {
     variable_saw: VariableSawOscillator,
     auxiliary_amount: f32,
     xmod_amount: f32,
-    temp_buffer: [f32; MAX_BLOCK_SIZE],
+    temp_buffer: Box<[f32]>,
 }
 
-impl Default for VirtualAnalogEngine {
-    fn default() -> Self {
+impl VirtualAnalogEngine {
+    pub fn new(block_size: usize) -> Self {
         Self {
             primary: VariableShapeOscillator::default(),
             auxiliary: VariableShapeOscillator::default(),
@@ -53,7 +58,7 @@ impl Default for VirtualAnalogEngine {
             variable_saw: VariableSawOscillator::default(),
             auxiliary_amount: 0.0,
             xmod_amount: 0.0,
-            temp_buffer: [0.0; MAX_BLOCK_SIZE],
+            temp_buffer: vec![0.0; block_size].into_boxed_slice(),
         }
     }
 }
@@ -93,8 +98,10 @@ impl Engine for VirtualAnalogEngine {
         let pw = (0.5 + (parameters.morph - 0.66) * 1.46).clamp(0.5, 0.995);
 
         // Monster sync into `aux`.
-        self.primary.render_synced(primary_f, primary_sync_f, pw, shape, out);
-        self.auxiliary.render_synced(auxiliary_f, auxiliary_sync_f, pw, shape, aux);
+        self.primary
+            .render_synced(primary_f, primary_sync_f, pw, shape, out);
+        self.auxiliary
+            .render_synced(auxiliary_f, auxiliary_sync_f, pw, shape, aux);
         for i in 0..size {
             aux[i] = (aux[i] - out[i]) * 0.5;
         }
@@ -121,9 +128,15 @@ impl Engine for VirtualAnalogEngine {
 
         let square_sync_f = note_to_frequency(parameters.note + square_sync_ratio);
 
-        self.sync
-            .render_synced(primary_f, square_sync_f, square_pw, 1.0, &mut self.temp_buffer[..size]);
-        self.variable_saw.render(auxiliary_f, saw_pw, saw_shape, out);
+        self.sync.render_synced(
+            primary_f,
+            square_sync_f,
+            square_pw,
+            1.0,
+            &mut self.temp_buffer[..size],
+        );
+        self.variable_saw
+            .render(auxiliary_f, saw_pw, saw_shape, out);
 
         let norm = 1.0 / square_gain.max(saw_gain);
 

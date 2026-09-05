@@ -16,7 +16,7 @@ pub const NUM_MODES: usize = 5;
 #[rustfmt::skip]
 const MODE_FREQUENCIES: [f32; NUM_MODES] = [1.00, 2.00, 3.18, 4.16, 5.62];
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct AnalogSnareDrum {
     pulse_remaining_samples: i32,
     pulse: f32,
@@ -55,7 +55,8 @@ impl AnalogSnareDrum {
         let trigger_pulse_duration = (1.0e-3 * SAMPLE_RATE) as i32;
         let pulse_decay_time = 0.1e-3 * SAMPLE_RATE;
         let q = 2000.0 * semitones_to_ratio(decay_xt * 84.0);
-        let noise_envelope_decay = 1.0 - 0.0017 * semitones_to_ratio(-decay * (50.0 + snappy * 10.0));
+        let noise_envelope_decay =
+            1.0 - 0.0017 * semitones_to_ratio(-decay * (50.0 + snappy * 10.0));
         let exciter_leak = snappy * (2.0 - snappy) * 0.1;
 
         let snappy = (snappy * 1.1 - 0.05).clamp(0.0, 1.0);
@@ -99,10 +100,12 @@ impl AnalogSnareDrum {
         }
 
         let f_noise = (f0 * 16.0).clamp(0.0, 0.499);
-        self.noise_filter.set_f_q(f_noise, 1.0 + f_noise * 1.5, FrequencyApproximation::Fast);
+        self.noise_filter
+            .set_f_q(f_noise, 1.0 + f_noise * 1.5, FrequencyApproximation::Fast);
 
         let size = out.len();
-        let mut sustain_gain = ParameterInterpolator::new(&mut self.sustain_gain, accent * decay, size);
+        let mut sustain_gain =
+            ParameterInterpolator::new(&mut self.sustain_gain, accent * decay, size);
 
         for o in out.iter_mut() {
             // Q45 / Q46
@@ -135,7 +138,8 @@ impl AnalogSnareDrum {
                     * if sustain {
                         self.oscillator[i].next(f[i]) * sustain_gain_value * 0.25
                     } else {
-                        self.resonator[i].process(FilterMode::BandPass, excitation) + excitation * exciter_leak
+                        self.resonator[i].process(FilterMode::BandPass, excitation)
+                            + excitation * exciter_leak
                     };
             }
             shell = soft_clip(shell);
@@ -146,7 +150,12 @@ impl AnalogSnareDrum {
                 noise = 0.0;
             }
             self.noise_envelope *= noise_envelope_decay;
-            noise *= (if sustain { sustain_gain_value } else { self.noise_envelope }) * snappy * 2.0;
+            noise *= (if sustain {
+                sustain_gain_value
+            } else {
+                self.noise_envelope
+            }) * snappy
+                * 2.0;
 
             let noise = self.noise_filter.process(FilterMode::BandPass, noise);
 

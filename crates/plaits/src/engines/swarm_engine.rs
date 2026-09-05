@@ -95,7 +95,11 @@ impl GrainEnvelope {
         self.filter_coefficient *= 0.95;
 
         self.previous_size_ratio = size_ratio;
-        one_pole(&mut self.amplitude, target_amplitude, 0.5 - self.filter_coefficient);
+        one_pole(
+            &mut self.amplitude,
+            target_amplitude,
+            0.5 - self.filter_coefficient,
+        );
         self.amplitude
     }
 }
@@ -193,6 +197,7 @@ impl SwarmVoice {
     }
 }
 
+#[derive(Debug)]
 pub struct SwarmEngine {
     swarm_voice: [SwarmVoice; NUM_SWARM_VOICES],
 }
@@ -241,7 +246,16 @@ impl Engine for SwarmEngine {
         aux.fill(0.0);
 
         for voice in self.swarm_voice.iter_mut() {
-            voice.render(f0, density, burst_mode, start_burst, spread, size_ratio, out, aux);
+            voice.render(
+                f0,
+                density,
+                burst_mode,
+                start_burst,
+                spread,
+                size_ratio,
+                out,
+                aux,
+            );
             size_ratio *= 0.97;
         }
         already_enveloped

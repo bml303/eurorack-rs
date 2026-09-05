@@ -10,7 +10,7 @@
 //! are no-ops.
 use crate::engine::{Engine, EngineParameters, PostProcessingSettings};
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct SpeechEngine;
 
 impl SpeechEngine {

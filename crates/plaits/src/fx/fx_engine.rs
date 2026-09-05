@@ -15,6 +15,7 @@
 
 /// One shared power-of-two ring buffer plus the running accumulator state,
 /// matching `FxEngine<N>::Context` for one sample.
+#[derive(Debug)]
 pub struct FxBuffer<const N: usize> {
     buffer: [f32; N],
     write_ptr: i64,
@@ -169,7 +170,14 @@ impl<const N: usize> FxContext<'_, N> {
 
     /// `c.Interpolate(tap, offset, lfo_index, amplitude, scale)`.
     #[inline]
-    pub fn interpolate_lfo(&mut self, tap: Tap, offset: f32, lfo_index: usize, amplitude: f32, scale: f32) {
+    pub fn interpolate_lfo(
+        &mut self,
+        tap: Tap,
+        offset: f32,
+        lfo_index: usize,
+        amplitude: f32,
+        scale: f32,
+    ) {
         self.interpolate(tap, offset + amplitude * self.lfo_value[lfo_index], scale);
     }
 }

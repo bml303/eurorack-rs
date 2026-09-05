@@ -9,13 +9,16 @@ use stmlib::HysteresisQuantizer2;
 use super::arpeggiator::{Arpeggiator, ArpeggiatorMode};
 use crate::chords::{ChordBank, NUM_NOTES, NUM_VOICES};
 use crate::dsp::SAMPLE_RATE;
-use crate::engine::{note_to_frequency, trigger_state, Engine, EngineParameters, PostProcessingSettings};
+use crate::engine::{
+    note_to_frequency, trigger_state, Engine, EngineParameters, PostProcessingSettings,
+};
 use crate::oscillator::{NesTriangleOscillator, SuperSquareOscillator};
 
 /// Sentinel `envelope_shape` value meaning "no envelope" (`NO_ENVELOPE` in
 /// the C, `enum { NO_ENVELOPE = 2 }`).
 pub const NO_ENVELOPE: f32 = 2.0;
 
+#[derive(Debug)]
 pub struct ChiptuneEngine {
     voice: [SuperSquareOscillator; NUM_VOICES],
     bass: NesTriangleOscillator,
@@ -96,7 +99,8 @@ impl Engine for ChiptuneEngine {
                 self.chords.sort();
 
                 let pattern = self.arpeggiator_pattern_selector.process(parameters.timbre);
-                self.arpeggiator.set_mode(ArpeggiatorMode::from_index(pattern / 3));
+                self.arpeggiator
+                    .set_mode(ArpeggiatorMode::from_index(pattern / 3));
                 self.arpeggiator.set_range(1 << (pattern % 3));
                 self.arpeggiator.clock(self.chords.num_notes());
                 self.envelope_state = 1.0;
@@ -110,7 +114,8 @@ impl Engine for ChiptuneEngine {
             let mut amplitudes = [0.0f32; NUM_VOICES];
 
             self.chords.set_chord(parameters.harmonics);
-            self.chords.compute_chord_inversion(parameters.timbre, &mut ratios, &mut amplitudes);
+            self.chords
+                .compute_chord_inversion(parameters.timbre, &mut ratios, &mut amplitudes);
             for j in (1..NUM_VOICES).step_by(2) {
                 amplitudes[j] = -amplitudes[j];
             }

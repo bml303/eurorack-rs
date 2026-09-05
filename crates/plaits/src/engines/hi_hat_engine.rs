@@ -1,22 +1,31 @@
 //! `plaits/dsp/engine/hi_hat_engine.h` -- two 808-style hi-hats: a faithful
 //! one (`out`) and a more metallic ring-modulated one (`aux`).
 
-use crate::dsp::MAX_BLOCK_SIZE;
-use crate::drums::{HiHat, MetallicNoise, Vca};
-use crate::engine::{note_to_frequency, trigger_state, Engine, EngineParameters, PostProcessingSettings};
+extern crate alloc;
 
+use alloc::boxed::Box;
+use alloc::vec;
+
+use crate::drums::{HiHat, MetallicNoise, Vca};
+use crate::engine::{
+    note_to_frequency, trigger_state, Engine, EngineParameters, PostProcessingSettings,
+};
+
+#[derive(Default, Debug)]
 pub struct HiHatEngine {
     hi_hat_1: HiHat,
     hi_hat_2: HiHat,
-    temp_buffer: [f32; MAX_BLOCK_SIZE * 2],
+    temp_buffer_1: Box<[f32]>,
+    temp_buffer_2: Box<[f32]>,
 }
 
-impl Default for HiHatEngine {
-    fn default() -> Self {
+impl HiHatEngine {
+    pub fn new(block_size: usize) -> Self {
         Self {
             hi_hat_1: HiHat::new(MetallicNoise::Square, Vca::Swing, true, false),
             hi_hat_2: HiHat::new(MetallicNoise::RingMod, Vca::Linear, false, true),
-            temp_buffer: [0.0; MAX_BLOCK_SIZE * 2],
+            temp_buffer_1: vec![0.0; block_size].into_boxed_slice(),
+            temp_buffer_2: vec![0.0; block_size].into_boxed_slice(),
         }
     }
 }
@@ -41,9 +50,8 @@ impl Engine for HiHatEngine {
         let size = out.len();
         let f0 = note_to_frequency(parameters.note);
 
-        let (temp_1, temp_2) = self.temp_buffer.split_at_mut(size);
-        let temp_1 = &mut temp_1[..size];
-        let temp_2 = &mut temp_2[..size];
+        let temp_1 = &mut self.temp_buffer_1[..size];
+        let temp_2 = &mut self.temp_buffer_2[..size];
 
         self.hi_hat_1.render(
             parameters.trigger & trigger_state::UNPATCHED != 0,

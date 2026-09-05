@@ -11,7 +11,7 @@
 //! [`super::speech_engine::SpeechEngine`]. `render` outputs silence.
 use crate::engine::{Engine, EngineParameters, PostProcessingSettings};
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct SixOpEngine;
 
 impl Engine for SixOpEngine {

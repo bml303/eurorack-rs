@@ -8,9 +8,13 @@
 //! `None`, so [`WaveTerrainEngine::terrain`] never selects it and
 //! `num_terrains` stays 8.
 
+extern crate alloc;
+
+use alloc::boxed::Box;
+use alloc::vec;
+
 use stmlib::parameter_interpolator::ParameterInterpolator;
 
-use crate::dsp::MAX_BLOCK_SIZE;
 use crate::engine::{note_to_frequency, Engine, EngineParameters, PostProcessingSettings};
 use crate::oscillator::{sine, FastSineOscillator};
 use crate::resources::WAV_INTEGRATED_WAVES;
@@ -81,21 +85,24 @@ fn squash(x: f32, a: f32) -> f32 {
     x / (1.0 + x.abs())
 }
 
+#[derive(Default, Debug)]
 pub struct WaveTerrainEngine {
     path: FastSineOscillator,
     offset: f32,
     terrain: f32,
-    temp_buffer: [f32; MAX_BLOCK_SIZE * 4],
+    temp_buffer_1: Box<[f32]>,
+    temp_buffer_2: Box<[f32]>,
     user_terrain: Option<&'static [u8]>,
 }
 
-impl Default for WaveTerrainEngine {
-    fn default() -> Self {
+impl WaveTerrainEngine {
+    pub fn new(block_size: usize) -> Self {
         Self {
             path: FastSineOscillator::default(),
             offset: 0.0,
             terrain: 0.0,
-            temp_buffer: [0.0; MAX_BLOCK_SIZE * 4],
+            temp_buffer_1: vec![0.0; block_size * 2].into_boxed_slice(),
+            temp_buffer_2: vec![0.0; block_size * 2].into_boxed_slice(),
             user_terrain: None,
         }
     }
@@ -121,7 +128,11 @@ fn terrain_fn(user_terrain: Option<&'static [u8]>, x: f32, y: f32, terrain_index
             let xys = (x - 0.25) * (y + 0.25);
             sine(K + xy / (2.0 + (5.0 * xys).abs()) * 6.366)
         }
-        4 => sine(0.159 / (0.170 + (y - 0.25).abs()) + 0.477 / (0.350 + ((x + 0.5) * (y + 1.5)).abs()) + K),
+        4 => sine(
+            0.159 / (0.170 + (y - 0.25).abs())
+                + 0.477 / (0.350 + ((x + 0.5) * (y + 1.5)).abs())
+                + K,
+        ),
         5 | 6 | 7 => terrain_lookup_wt(x, y, 2 - (terrain_index - 5) as usize),
         8 => {
             // Unreachable: `user_terrain` is always `None` in this port.
@@ -163,17 +174,18 @@ impl Engine for WaveTerrainEngine {
         let size = out.len();
         const SCALE: f32 = 1.0 / OVERSAMPLING as f32;
 
-        let (path_x, path_y) = self.temp_buffer.split_at_mut(OVERSAMPLING * size);
-        let path_x = &mut path_x[..OVERSAMPLING * size];
-        let path_y = &mut path_y[..OVERSAMPLING * size];
+        let path_x = &mut self.temp_buffer_1[..OVERSAMPLING * size];
+        let path_y = &mut self.temp_buffer_2[..OVERSAMPLING * size];
 
         let f0 = note_to_frequency(parameters.note);
         let attenuation = (1.0 - 8.0 * f0).max(0.0);
         let radius = 0.1 + 0.9 * parameters.timbre * attenuation * (2.0 - attenuation);
 
-        self.path.render_quadrature(f0 * SCALE, radius, path_x, path_y);
+        self.path
+            .render_quadrature(f0 * SCALE, radius, path_x, path_y);
 
-        let mut offset = ParameterInterpolator::new(&mut self.offset, 1.9 * parameters.morph - 1.0, size);
+        let mut offset =
+            ParameterInterpolator::new(&mut self.offset, 1.9 * parameters.morph - 1.0, size);
         let num_terrains = if self.user_terrain.is_some() { 9 } else { 8 };
         let mut terrain = ParameterInterpolator::new(
             &mut self.terrain,

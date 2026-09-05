@@ -4,8 +4,8 @@
 use stmlib::parameter_interpolator::ParameterInterpolator;
 
 use crate::engine::{note_to_frequency, Engine, EngineParameters, PostProcessingSettings};
-use crate::oscillator::{Oscillator, OscillatorShape};
 use crate::oscillator::sine;
+use crate::oscillator::{Oscillator, OscillatorShape};
 use crate::resources::{LOOKUP_TABLE_I16_TABLE, LUT_FOLD, LUT_FOLD_2};
 
 /// `InterpolateHermite(table + 1, index, size)` -- the C shifts the table
@@ -39,7 +39,7 @@ fn tame(f0: f32, harmonics: f32, order: f32) -> f32 {
     max_amount * max_amount * max_amount
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct WaveshapingEngine {
     slope: Oscillator,
     triangle: Oscillator,

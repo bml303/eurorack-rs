@@ -4,14 +4,14 @@
 
 use stmlib::fdsp::{interpolate, one_pole};
 
-use crate::dsp::A0;
 use crate::downsampler::{Downsampler, OVERSAMPLING};
+use crate::dsp::A0;
 use crate::engine::{note_to_frequency, Engine, EngineParameters, PostProcessingSettings};
 use crate::oscillator::sine_pm;
 use crate::resources::LUT_FM_FREQUENCY_QUANTIZER;
 use stmlib::parameter_interpolator::ParameterInterpolator;
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct FmEngine {
     carrier_phase: u32,
     modulator_phase: u32,
@@ -62,8 +62,11 @@ impl Engine for FmEngine {
         let mut hf_taming = (1.0 - (modulator_note - 72.0) * 0.025).clamp(0.0, 1.0);
         hf_taming *= hf_taming;
 
-        let mut carrier_frequency =
-            ParameterInterpolator::new(&mut self.previous_carrier_frequency, note_to_frequency(note), size);
+        let mut carrier_frequency = ParameterInterpolator::new(
+            &mut self.previous_carrier_frequency,
+            note_to_frequency(note),
+            size,
+        );
         let mut modulator_frequency = ParameterInterpolator::new(
             &mut self.previous_modulator_frequency,
             target_modulator_frequency,
@@ -74,8 +77,11 @@ impl Engine for FmEngine {
             2.0 * parameters.timbre * parameters.timbre * hf_taming,
             size,
         );
-        let mut feedback_modulation =
-            ParameterInterpolator::new(&mut self.previous_feedback, 2.0 * parameters.morph - 1.0, size);
+        let mut feedback_modulation = ParameterInterpolator::new(
+            &mut self.previous_feedback,
+            2.0 * parameters.morph - 1.0,
+            size,
+        );
 
         let mut carrier_downsampler = Downsampler::new(&mut self.carrier_fir);
         let mut sub_downsampler = Downsampler::new(&mut self.sub_fir);
@@ -85,18 +91,27 @@ impl Engine for FmEngine {
         for i in 0..size {
             let amount = amount_modulation.next();
             let feedback = feedback_modulation.next();
-            let phase_feedback = if feedback < 0.0 { 0.5 * feedback * feedback } else { 0.0 };
+            let phase_feedback = if feedback < 0.0 {
+                0.5 * feedback * feedback
+            } else {
+                0.0
+            };
             let carrier_increment = (MAX_UINT32 * carrier_frequency.next()) as u32;
             let modulator_frequency_now = modulator_frequency.next();
 
             for j in 0..OVERSAMPLING {
                 self.modulator_phase = self.modulator_phase.wrapping_add(
-                    (MAX_UINT32 * modulator_frequency_now * (1.0 + self.previous_sample * phase_feedback))
-                        as u32,
+                    (MAX_UINT32
+                        * modulator_frequency_now
+                        * (1.0 + self.previous_sample * phase_feedback)) as u32,
                 );
                 self.carrier_phase = self.carrier_phase.wrapping_add(carrier_increment);
                 self.sub_phase = self.sub_phase.wrapping_add(carrier_increment >> 1);
-                let modulator_fb = if feedback > 0.0 { 0.25 * feedback * feedback } else { 0.0 };
+                let modulator_fb = if feedback > 0.0 {
+                    0.25 * feedback * feedback
+                } else {
+                    0.0
+                };
                 let modulator = sine_pm(self.modulator_phase, modulator_fb * self.previous_sample);
                 let carrier = sine_pm(self.carrier_phase, amount * modulator);
                 let sub = sine_pm(self.sub_phase, amount * carrier * 0.25);

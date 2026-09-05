@@ -60,6 +60,7 @@ fn update_amplitudes(
     }
 }
 
+#[derive(Debug)]
 pub struct AdditiveEngine {
     harmonic_oscillator: [HarmonicOscillator<HARMONIC_BATCH_SIZE>; NUM_HARMONIC_OSCILLATORS],
     amplitudes: [f32; NUM_HARMONICS],
@@ -102,14 +103,26 @@ impl Engine for AdditiveEngine {
         let slope = 0.01 + 1.99 * raw_slope * raw_slope * raw_slope;
         let bumps = 16.0 * raw_bumps * raw_bumps;
 
-        update_amplitudes(centroid, slope, bumps, &mut self.amplitudes[0..24], &INTEGER_HARMONICS);
+        update_amplitudes(
+            centroid,
+            slope,
+            bumps,
+            &mut self.amplitudes[0..24],
+            &INTEGER_HARMONICS,
+        );
 
         let batch_0: [f32; HARMONIC_BATCH_SIZE] = self.amplitudes[0..12].try_into().unwrap();
         self.harmonic_oscillator[0].render(1, f0, &batch_0, out);
         let batch_1: [f32; HARMONIC_BATCH_SIZE] = self.amplitudes[12..24].try_into().unwrap();
         self.harmonic_oscillator[1].render(13, f0, &batch_1, out);
 
-        update_amplitudes(centroid, slope, bumps, &mut self.amplitudes[24..36], &ORGAN_HARMONICS);
+        update_amplitudes(
+            centroid,
+            slope,
+            bumps,
+            &mut self.amplitudes[24..36],
+            &ORGAN_HARMONICS,
+        );
         let batch_2: [f32; HARMONIC_BATCH_SIZE] = self.amplitudes[24..36].try_into().unwrap();
         self.harmonic_oscillator[2].render(1, f0, &batch_2, aux);
 

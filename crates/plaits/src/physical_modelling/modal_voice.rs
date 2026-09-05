@@ -6,10 +6,9 @@ use stmlib::filter::FilterMode;
 use stmlib::units::semitones_to_ratio;
 
 use super::resonator::{Resonator, ResonatorSvf, MAX_NUM_MODES};
-use crate::dsp::MAX_BLOCK_SIZE;
 use crate::noise::dust;
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct ModalVoice {
     excitation_filter: ResonatorSvf<1>,
     resonator: Resonator,
@@ -32,6 +31,7 @@ impl ModalVoice {
         mut brightness: f32,
         mut damping: f32,
         temp: &mut [f32],
+        temp_2: &mut [f32],
         out: &mut [f32],
         aux: &mut [f32],
     ) {
@@ -64,8 +64,6 @@ impl ModalVoice {
         // `Process<FILTER_MODE_LOW_PASS, false>(&cutoff, &q, &one, temp, temp, size)`
         // in the C -- an in-place call. Rust can't alias `temp` as both `&[f32]`
         // and `&mut [f32]`, so filter into a scratch buffer and copy back.
-        let mut filtered = [0.0f32; MAX_BLOCK_SIZE];
-        let filtered = &mut filtered[..temp.len()];
         self.excitation_filter.process(
             FilterMode::LowPass,
             false,
@@ -73,14 +71,14 @@ impl ModalVoice {
             &[q],
             &[1.0],
             temp,
-            filtered,
+            temp_2,
         );
-        temp.copy_from_slice(filtered);
 
         for i in 0..temp.len() {
-            aux[i] += temp[i];
+            aux[i] += temp_2[i];
         }
 
-        self.resonator.process(f0, structure, brightness, damping, temp, out);
+        self.resonator
+            .process(f0, structure, brightness, damping, temp_2, out);
     }
 }
