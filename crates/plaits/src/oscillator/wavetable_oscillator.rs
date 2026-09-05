@@ -20,6 +20,10 @@ pub struct Differentiator {
 }
 
 impl Differentiator {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
     pub fn init(&mut self) {
         self.previous = 0.0;
         self.lp = 0.0;
@@ -40,7 +44,11 @@ pub fn interpolate_wave(table: &[i16], index_integral: usize, index_fractional: 
 }
 
 #[inline]
-pub fn interpolate_wave_hermite(table: &[i16], index_integral: usize, index_fractional: f32) -> f32 {
+pub fn interpolate_wave_hermite(
+    table: &[i16],
+    index_integral: usize,
+    index_fractional: f32,
+) -> f32 {
     let xm1 = table[index_integral] as f32;
     let x0 = table[index_integral + 1] as f32;
     let x1 = table[index_integral + 2] as f32;
@@ -110,7 +118,11 @@ impl WavetableOscillator {
         for o in out.iter_mut() {
             let f0 = fm.next();
             let cutoff = (wavetable_size as f32 * f0).min(1.0);
-            let scale = if approximate_scale { 1.0 } else { 1.0 / (f0 * 131072.0) };
+            let scale = if approximate_scale {
+                1.0
+            } else {
+                1.0 / (f0 * 131072.0)
+            };
 
             phase += f0;
             if phase >= 1.0 {

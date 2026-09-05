@@ -18,12 +18,12 @@
 //!   `LoadUserData` gave it) collapse to the same stub with no behavioral
 //!   difference between the three slots -- see the deviation above.
 
-use log::*;
 use stmlib::units::semitones_to_ratio;
 use stmlib::{DelayLine, HysteresisQuantizer2, Limiter};
 
+use crate::PostProcessingSettings;
 use crate::dsp::INV_SAMPLE_RATE;
-use crate::engine::{note_to_frequency, trigger_state, Engine, EngineParameters};
+use crate::engine::{Engine, EngineParameters, note_to_frequency, trigger_state};
 use crate::engines::{
     AdditiveEngine, BassDrumEngine, ChiptuneEngine, ChordEngine, FmEngine, GrainEngine,
     HiHatEngine, ModalEngine, NoiseEngine, ParticleEngine, PhaseDistortionEngine, SixOpEngine,
@@ -33,7 +33,6 @@ use crate::engines::{
 };
 use crate::envelope::{DecayEnvelope, LpgEnvelope};
 use crate::fx::LowPassGate;
-use crate::PostProcessingSettings;
 
 pub const MAX_ENGINES: usize = 24;
 pub const MAX_TRIGGER_DELAY: usize = 8;
@@ -76,7 +75,7 @@ impl ChannelPostProcessor {
         if gain < 0.0 {
             self.limiter.process(-gain, in_out);
         }
-        let post_gain = (if gain < 0.0 { 1.0 } else { gain }) * -32767.0;
+        let post_gain = if gain < 0.0 { 1.0 } else { gain };
         if !bypass_lpg {
             self.lpg.process(
                 post_gain * low_pass_gate_gain,
@@ -270,7 +269,7 @@ impl Voice {
 
             virtual_analog_vcf_engine: VirtualAnalogVcfEngine::default(),
             phase_distortion_engine: PhaseDistortionEngine::new(block_size),
-            six_op_engine: SixOpEngine::default(),
+            six_op_engine: SixOpEngine::new(block_size),
             wave_terrain_engine: WaveTerrainEngine::new(block_size),
             string_machine_engine: StringMachineEngine::default(),
             chiptune_engine: ChiptuneEngine::default(),
@@ -376,7 +375,7 @@ impl Voice {
         self.previous_engine_index
     }
 
-    fn render_internal(
+    fn render_without_postprocessors(
         &mut self,
         patch: &Patch,
         modulations: &Modulations,
@@ -408,9 +407,33 @@ impl Voice {
         // Engine selection.
         let engine_index = self
             .engine_quantizer
-            .process_base(patch.engine, self.engine_cv);
+            .process_base(patch.engine, self.engine_cv)
+            .clamp(0, MAX_ENGINES as i32);
 
         if engine_index != self.previous_engine_index || self.reload_user_data {
+            match engine_index {
+                2 => {
+                    self.six_op_engine
+                        .load_syx_bank(&crate::resources::SYX_BANK_0);
+                }
+                3 => {
+                    self.six_op_engine
+                        .load_syx_bank(&crate::resources::SYX_BANK_1);
+                }
+                4 => {
+                    self.six_op_engine
+                        .load_syx_bank(&crate::resources::SYX_BANK_2);
+                }
+                5 => {
+                    self.wave_terrain_engine
+                        .load_user_data(Some(&crate::resources::SYX_BANK_0));
+                }
+                13 => {
+                    self.wavetable_engine
+                        .set_wavetables(&crate::resources::WAV_INTEGRATED_WAVES);
+                }
+                _ => {}
+            }
             // No flash-backed user-data source is wired into this port (see
             // the module doc) -- every engine always gets `None`.
             self.engine_mut(engine_index).load_user_data(None);
@@ -536,7 +559,7 @@ impl Voice {
         let lpg_bypass =
             already_enveloped || (!modulations.level_patched && !modulations.trigger_patched);
 
-        // Compute LPG parameters.
+        // -- compute LPG parameters.
         if !lpg_bypass {
             let hf = patch.lpg_colour;
             let decay_tail = (20.0 * out.len() as f32)
@@ -566,7 +589,8 @@ impl Voice {
         out_buffer: &mut [f32],
         aux_buffer: &mut [f32],
     ) {
-        let (pp_s, lpg_bypass) = self.render_internal(patch, modulations, out_buffer, aux_buffer);
+        let (pp_s, lpg_bypass) =
+            self.render_without_postprocessors(patch, modulations, out_buffer, aux_buffer);
 
         self.out_post_processor.process(
             pp_s.out_gain,
@@ -613,7 +637,8 @@ impl Voice {
         out_i16: &mut [i16],
         aux_i16: &mut [i16],
     ) {
-        let (pp_s, lpg_bypass) = self.render_internal(patch, modulations, out_buffer, aux_buffer);
+        let (pp_s, lpg_bypass) =
+            self.render_without_postprocessors(patch, modulations, out_buffer, aux_buffer);
 
         self.out_post_processor.process_i16(
             pp_s.out_gain,
