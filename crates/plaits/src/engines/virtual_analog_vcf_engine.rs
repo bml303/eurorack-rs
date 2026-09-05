@@ -8,7 +8,7 @@ use stmlib::filter::{FilterMode, FrequencyApproximation, Svf};
 use stmlib::parameter_interpolator::ParameterInterpolator;
 use stmlib::units::semitones_to_ratio;
 
-use crate::engine::{note_to_frequency, Engine, EngineParameters, PostProcessingSettings};
+use crate::engine::{Engine, EngineParameters, PostProcessingSettings, note_to_frequency};
 use crate::oscillator::VariableShapeOscillator;
 
 #[derive(Default, Debug)]

@@ -202,7 +202,7 @@ fn apply_modulations(
 }
 
 #[derive(Default, Debug)]
-pub struct Voice {
+pub struct Voice<'a> {
     virtual_analog_engine: VirtualAnalogEngine,
     waveshaping_engine: WaveshapingEngine,
     fm_engine: FmEngine,
@@ -210,7 +210,7 @@ pub struct Voice {
     additive_engine: AdditiveEngine,
     wavetable_engine: WavetableEngine,
     chord_engine: ChordEngine,
-    speech_engine: SpeechEngine,
+    speech_engine: SpeechEngine<'a>,
 
     swarm_engine: SwarmEngine,
     noise_engine: NoiseEngine,
@@ -246,7 +246,7 @@ pub struct Voice {
     aux_post_processor: ChannelPostProcessor,
 }
 
-impl Voice {
+impl Voice<'_> {
     pub fn new(block_size: usize) -> Self {
         Self {
             virtual_analog_engine: VirtualAnalogEngine::new(block_size),
@@ -256,7 +256,7 @@ impl Voice {
             additive_engine: AdditiveEngine::default(),
             wavetable_engine: WavetableEngine::default(),
             chord_engine: ChordEngine::default(),
-            speech_engine: SpeechEngine::default(),
+            speech_engine: SpeechEngine::new(block_size),
 
             swarm_engine: SwarmEngine::default(),
             noise_engine: NoiseEngine::new(block_size),
@@ -434,9 +434,6 @@ impl Voice {
                 }
                 _ => {}
             }
-            // No flash-backed user-data source is wired into this port (see
-            // the module doc) -- every engine always gets `None`.
-            self.engine_mut(engine_index).load_user_data(None);
             self.engine_mut(engine_index).reset();
 
             self.out_post_processor.reset();

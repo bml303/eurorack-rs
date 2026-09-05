@@ -1368,6 +1368,8 @@ pub static LUT_WS_DOUBLE_BUMP: [i16; 257] = [
     -32412, -32567, -32678, -32745, -32767,
 ];
 
+pub const LUT_LPC_EXCITATION_PULSE_SIZE: usize = 640;
+
 pub static LUT_LPC_EXCITATION_PULSE: [i8; 640] = [
     0, 0, 0, 0, 1, 1, 1, 2, 3, 3, 4, 5,
     6, 7, 8, 9, 10, 12, 13, 15, 17, 19, 21, 23,
