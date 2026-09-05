@@ -21,7 +21,7 @@ fn diode(x: f32) -> f32 {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct AnalogBassDrum {
     pulse_remaining_samples: i32,
     fm_pulse_remaining_samples: i32,
@@ -76,7 +76,8 @@ impl AnalogBassDrum {
         }
 
         let size = out.len();
-        let mut sustain_gain = ParameterInterpolator::new(&mut self.sustain_gain, accent * decay, size);
+        let mut sustain_gain =
+            ParameterInterpolator::new(&mut self.sustain_gain, accent * decay, size);
 
         for o in out.iter_mut() {
             // Q39 / Q40
@@ -107,7 +108,11 @@ impl AnalogBassDrum {
                 self.fm_pulse_remaining_samples -= 1;
                 fm_pulse = 1.0;
                 // C39 / C52
-                self.retrig_pulse = if self.fm_pulse_remaining_samples != 0 { 0.0 } else { -0.8 };
+                self.retrig_pulse = if self.fm_pulse_remaining_samples != 0 {
+                    0.0
+                } else {
+                    -0.8
+                };
             } else {
                 // C39 / R161
                 self.retrig_pulse *= 1.0 - 1.0 / retrig_pulse_duration;
@@ -131,15 +136,22 @@ impl AnalogBassDrum {
                 resonator_out = s;
                 self.lp_out = c;
             } else {
-                self.resonator.set_f_q(f, 1.0 + q * f, FrequencyApproximation::Dirty);
-                let (bp, lp) = self
-                    .resonator
-                    .process_dual(FilterMode::BandPass, FilterMode::LowPass, (pulse - self.retrig_pulse * 0.2) * scale);
+                self.resonator
+                    .set_f_q(f, 1.0 + q * f, FrequencyApproximation::Dirty);
+                let (bp, lp) = self.resonator.process_dual(
+                    FilterMode::BandPass,
+                    FilterMode::LowPass,
+                    (pulse - self.retrig_pulse * 0.2) * scale,
+                );
                 resonator_out = bp;
                 self.lp_out = lp;
             }
 
-            one_pole(&mut self.tone_lp, pulse * exciter_leak + resonator_out, tone_f);
+            one_pole(
+                &mut self.tone_lp,
+                pulse * exciter_leak + resonator_out,
+                tone_f,
+            );
 
             *o = self.tone_lp;
         }

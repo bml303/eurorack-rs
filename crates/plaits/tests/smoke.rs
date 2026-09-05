@@ -64,7 +64,19 @@ fn every_engine_renders_finite_audio() {
             modulations.note = ((step * 7) % 24) as f32 - 12.0;
 
             let mut frames = [Frame::default(); BLOCK_SIZE];
-            voice.render(&patch, &modulations, &mut frames);
+            let mut out_buffer = [0.0; BLOCK_SIZE];
+            let mut aux_buffer = [0.0; BLOCK_SIZE];
+            let mut out_i16 = [0i16; BLOCK_SIZE];
+            let mut aux_i16 = [0i16; BLOCK_SIZE];
+            voice.render_frames(
+                &patch,
+                &modulations,
+                &mut out_buffer,
+                &mut aux_buffer,
+                &mut out_i16,
+                &mut aux_i16,
+                &mut frames,
+            );
         }
     }
 }
@@ -76,8 +88,20 @@ fn engine_selection_is_stable_and_in_range() {
     for engine in 0..24i32 {
         let patch = base_patch(engine);
         let modulations = base_modulations();
+        let mut out_buffer = [0.0; BLOCK_SIZE];
+        let mut aux_buffer = [0.0; BLOCK_SIZE];
+        let mut out_i16 = [0i16; BLOCK_SIZE];
+        let mut aux_i16 = [0i16; BLOCK_SIZE];
         let mut frames = [Frame::default(); BLOCK_SIZE];
-        voice.render(&patch, &modulations, &mut frames);
+        voice.render_frames(
+            &patch,
+            &modulations,
+            &mut out_buffer,
+            &mut aux_buffer,
+            &mut out_i16,
+            &mut aux_i16,
+            &mut frames,
+        );
         assert!(
             (0..24).contains(&voice.active_engine()),
             "active_engine() out of range for requested engine {engine}"

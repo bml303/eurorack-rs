@@ -10,7 +10,7 @@ use stmlib::Random;
 use crate::dsp::SAMPLE_RATE;
 use crate::oscillator::sine;
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct SyntheticBassDrumClick {
     lp: f32,
     hp: f32,
@@ -22,7 +22,8 @@ impl SyntheticBassDrumClick {
         self.lp = 0.0;
         self.hp = 0.0;
         self.filter.init();
-        self.filter.set_f_q(5000.0 / SAMPLE_RATE, 2.0, FrequencyApproximation::Fast);
+        self.filter
+            .set_f_q(5000.0 / SAMPLE_RATE, 2.0, FrequencyApproximation::Fast);
     }
 
     pub fn process(&mut self, input: f32) -> f32 {
@@ -32,7 +33,7 @@ impl SyntheticBassDrumClick {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct SyntheticBassDrumAttackNoise {
     lp: f32,
     hp: f32,
@@ -52,7 +53,7 @@ impl SyntheticBassDrumAttackNoise {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct SyntheticBassDrum {
     f0: f32,
     phase: f32,
@@ -129,7 +130,8 @@ impl SyntheticBassDrum {
             self.fm_pulse_width = (SAMPLE_RATE * 0.0013) as i32;
         }
 
-        let mut sustain_gain = ParameterInterpolator::new(&mut self.sustain_gain, accent * decay, size);
+        let mut sustain_gain =
+            ParameterInterpolator::new(&mut self.sustain_gain, accent * decay, size);
 
         for o in out.iter_mut() {
             one_pole(&mut self.phase_noise, Random::get_float() - 0.5, 0.002);
@@ -165,12 +167,19 @@ impl SyntheticBassDrum {
 
                 const ENVELOPE_LP_F: f32 = 0.1;
                 one_pole(&mut self.body_env_lp, self.body_env, ENVELOPE_LP_F);
-                one_pole(&mut self.transient_env_lp, self.transient_env, ENVELOPE_LP_F);
+                one_pole(
+                    &mut self.transient_env_lp,
+                    self.transient_env,
+                    ENVELOPE_LP_F,
+                );
                 one_pole(&mut self.fm_lp, self.fm, ENVELOPE_LP_F);
 
                 let body = Self::distorted_sine(self.phase, self.phase_noise, dirtiness);
-                let transient = self.click.process(if self.body_env_pulse_width != 0 { 0.0 } else { 1.0 })
-                    + self.noise.render();
+                let transient = self.click.process(if self.body_env_pulse_width != 0 {
+                    0.0
+                } else {
+                    1.0
+                }) + self.noise.render();
 
                 mix -= Self::transistor_vca(body, self.body_env_lp);
                 mix -= transient * self.transient_env_lp * transient_level;

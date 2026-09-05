@@ -30,6 +30,7 @@ enum WaveSource {
     Custom(usize),
 }
 
+#[derive(Debug)]
 pub struct WavetableEngine {
     phase: f32,
     x_pre_lp: f32,
@@ -138,7 +139,9 @@ impl Engine for WavetableEngine {
                 let i = bank * NUM_WAVES_PER_BANK + wave;
                 let mut w = i;
                 if bank == NUM_BANKS - 1 {
-                    w = user_data.map(|d| d[wave] as usize).unwrap_or((w * 101) % NUM_WAVES);
+                    w = user_data
+                        .map(|d| d[wave] as usize)
+                        .unwrap_or((w * 101) % NUM_WAVES);
                 }
                 self.wave_map[i] = if w >= NUM_WAVES {
                     WaveSource::Custom((w - NUM_WAVES).min(NUM_CUSTOM_WAVES - 1))
@@ -181,12 +184,21 @@ impl Engine for WavetableEngine {
         y_fractional += quantization * (clamp_toward_center(y_fractional, 16.0) - y_fractional);
         z_fractional += quantization * (clamp_toward_center(z_fractional, 16.0) - z_fractional);
 
-        let mut x_modulation =
-            ParameterInterpolator::new(&mut self.previous_x, x_integral as f32 + x_fractional, size);
-        let mut y_modulation =
-            ParameterInterpolator::new(&mut self.previous_y, y_integral as f32 + y_fractional, size);
-        let mut z_modulation =
-            ParameterInterpolator::new(&mut self.previous_z, z_integral as f32 + z_fractional, size);
+        let mut x_modulation = ParameterInterpolator::new(
+            &mut self.previous_x,
+            x_integral as f32 + x_fractional,
+            size,
+        );
+        let mut y_modulation = ParameterInterpolator::new(
+            &mut self.previous_y,
+            y_integral as f32 + y_fractional,
+            size,
+        );
+        let mut z_modulation = ParameterInterpolator::new(
+            &mut self.previous_z,
+            z_integral as f32 + z_fractional,
+            size,
+        );
         let mut f0_modulation = ParameterInterpolator::new(&mut self.previous_f0, f0, size);
 
         for i in 0..size {
@@ -233,22 +245,86 @@ impl Engine for WavetableEngine {
                 z1 = 7 - z1;
             }
 
-            let x0y0z0 = read_wave(&self.wave_map, self.custom_waves, x0, y0, z0, p_integral, p_fractional);
-            let x1y0z0 = read_wave(&self.wave_map, self.custom_waves, x1, y0, z0, p_integral, p_fractional);
+            let x0y0z0 = read_wave(
+                &self.wave_map,
+                self.custom_waves,
+                x0,
+                y0,
+                z0,
+                p_integral,
+                p_fractional,
+            );
+            let x1y0z0 = read_wave(
+                &self.wave_map,
+                self.custom_waves,
+                x1,
+                y0,
+                z0,
+                p_integral,
+                p_fractional,
+            );
             let xy0z0 = x0y0z0 + (x1y0z0 - x0y0z0) * x_fractional;
 
-            let x0y1z0 = read_wave(&self.wave_map, self.custom_waves, x0, y1, z0, p_integral, p_fractional);
-            let x1y1z0 = read_wave(&self.wave_map, self.custom_waves, x1, y1, z0, p_integral, p_fractional);
+            let x0y1z0 = read_wave(
+                &self.wave_map,
+                self.custom_waves,
+                x0,
+                y1,
+                z0,
+                p_integral,
+                p_fractional,
+            );
+            let x1y1z0 = read_wave(
+                &self.wave_map,
+                self.custom_waves,
+                x1,
+                y1,
+                z0,
+                p_integral,
+                p_fractional,
+            );
             let xy1z0 = x0y1z0 + (x1y1z0 - x0y1z0) * x_fractional;
 
             let xyz0 = xy0z0 + (xy1z0 - xy0z0) * y_fractional;
 
-            let x0y0z1 = read_wave(&self.wave_map, self.custom_waves, x0, y0, z1, p_integral, p_fractional);
-            let x1y0z1 = read_wave(&self.wave_map, self.custom_waves, x1, y0, z1, p_integral, p_fractional);
+            let x0y0z1 = read_wave(
+                &self.wave_map,
+                self.custom_waves,
+                x0,
+                y0,
+                z1,
+                p_integral,
+                p_fractional,
+            );
+            let x1y0z1 = read_wave(
+                &self.wave_map,
+                self.custom_waves,
+                x1,
+                y0,
+                z1,
+                p_integral,
+                p_fractional,
+            );
             let xy0z1 = x0y0z1 + (x1y0z1 - x0y0z1) * x_fractional;
 
-            let x0y1z1 = read_wave(&self.wave_map, self.custom_waves, x0, y1, z1, p_integral, p_fractional);
-            let x1y1z1 = read_wave(&self.wave_map, self.custom_waves, x1, y1, z1, p_integral, p_fractional);
+            let x0y1z1 = read_wave(
+                &self.wave_map,
+                self.custom_waves,
+                x0,
+                y1,
+                z1,
+                p_integral,
+                p_fractional,
+            );
+            let x1y1z1 = read_wave(
+                &self.wave_map,
+                self.custom_waves,
+                x1,
+                y1,
+                z1,
+                p_integral,
+                p_fractional,
+            );
             let xy1z1 = x0y1z1 + (x1y1z1 - x0y1z1) * x_fractional;
 
             let xyz1 = xy0z1 + (xy1z1 - xy0z1) * y_fractional;

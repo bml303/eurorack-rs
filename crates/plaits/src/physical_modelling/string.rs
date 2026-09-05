@@ -25,6 +25,7 @@ pub enum StringNonLinearity {
     Dispersion,
 }
 
+#[derive(Debug)]
 pub struct String {
     string: DelayLine<DELAY_LINE_SIZE>,
     stretch: DelayLine<{ DELAY_LINE_SIZE / 4 }>,
@@ -135,7 +136,8 @@ impl String {
             damping_cutoff += to_infinite * (128.0 - damping_cutoff);
         }
 
-        self.iir_damping_filter.set_f_q(damping_f, 0.5, FrequencyApproximation::Fast);
+        self.iir_damping_filter
+            .set_f_q(damping_f, 0.5, FrequencyApproximation::Fast);
 
         let damping_compensation = interpolate(&LUT_SVF_SHIFT, damping_cutoff, 1.0);
 

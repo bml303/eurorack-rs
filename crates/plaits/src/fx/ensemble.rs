@@ -6,12 +6,19 @@ use crate::oscillator::sine_raw;
 
 const SIZE: usize = 1024;
 
-const LINE_L: Tap = Tap { base: 0, length: 511 };
-const LINE_R: Tap = Tap { base: 512, length: 511 };
+const LINE_L: Tap = Tap {
+    base: 0,
+    length: 511,
+};
+const LINE_R: Tap = Tap {
+    base: 512,
+    length: 511,
+};
 
 const ONE_THIRD: u32 = 1_417_339_207;
 const TWO_THIRD: u32 = 2_834_678_415;
 
+#[derive(Debug)]
 pub struct Ensemble {
     engine: FxBuffer<SIZE>,
     amount: f32,

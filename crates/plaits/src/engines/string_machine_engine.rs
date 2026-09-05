@@ -2,8 +2,8 @@
 //! organ "string machine" built from `NUM_NOTES` divide-down oscillators
 //! (one per chord note), a mixdown VCF pair, and an ensemble (chorus) FX.
 
-use stmlib::filter::{FilterMode, FrequencyApproximation, NaiveSvf};
 use stmlib::fdsp::one_pole;
+use stmlib::filter::{FilterMode, FrequencyApproximation, NaiveSvf};
 use stmlib::units::semitones_to_ratio;
 
 use crate::chords::{ChordBank, NUM_NOTES};
@@ -41,6 +41,7 @@ fn compute_registration(registration: f32, amplitudes: &mut [f32; NUM_HARMONICS 
     }
 }
 
+#[derive(Debug)]
 pub struct StringMachineEngine {
     chords: ChordBank,
     ensemble: Ensemble,
@@ -111,7 +112,12 @@ impl Engine for StringMachineEngine {
             let note_f0 = f0 * self.chords.ratio(note);
             let divide_down_gain = (4.0 - note_f0 * 32.0).clamp(0.0, 1.0);
             let dest: &mut [f32] = if note & 1 != 0 { &mut *aux } else { &mut *out };
-            self.divide_down_voice[note].render(note_f0, &harmonics7, 0.25 * divide_down_gain, dest);
+            self.divide_down_voice[note].render(
+                note_f0,
+                &harmonics7,
+                0.25 * divide_down_gain,
+                dest,
+            );
         }
 
         // Pass through VCF.

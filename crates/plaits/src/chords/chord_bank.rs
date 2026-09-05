@@ -23,6 +23,7 @@ const CHORDS: [[f32; NUM_NOTES]; NUM_CHORDS] = [
     [0.00, 4.00,  7.00, 12.00], // M
 ];
 
+#[derive(Debug)]
 pub struct ChordBank {
     chord_index_quantizer: HysteresisQuantizer2,
     ratios: [[f32; NUM_NOTES]; NUM_CHORDS],
@@ -43,7 +44,8 @@ impl Default for ChordBank {
 
 impl ChordBank {
     pub fn init(&mut self) {
-        self.chord_index_quantizer.init(NUM_CHORDS as i32, 0.075, false);
+        self.chord_index_quantizer
+            .init(NUM_CHORDS as i32, 0.075, false);
     }
 
     pub fn reset(&mut self) {
@@ -51,7 +53,10 @@ impl ChordBank {
             let mut count = 0;
             for j in 0..NUM_NOTES {
                 self.ratios[i][j] = semitones_to_ratio(CHORDS[i][j]);
-                if CHORDS[i][j] != 0.01 && CHORDS[i][j] != 7.01 && CHORDS[i][j] != 11.99 && CHORDS[i][j] != 12.00
+                if CHORDS[i][j] != 0.01
+                    && CHORDS[i][j] != 7.01
+                    && CHORDS[i][j] != 11.99
+                    && CHORDS[i][j] != 12.00
                 {
                     count += 1;
                 }
@@ -69,7 +74,8 @@ impl ChordBank {
             }
             self.sorted_ratios[i] = r;
         }
-        self.sorted_ratios.sort_unstable_by(|a, b| a.partial_cmp(b).unwrap());
+        self.sorted_ratios
+            .sort_unstable_by(|a, b| a.partial_cmp(b).unwrap());
     }
 
     #[inline]
@@ -125,8 +131,10 @@ impl ChordBank {
         let mut mask = 0u32;
 
         for i in 0..NUM_NOTES as i32 {
-            let transposition =
-                0.25 * (1i32 << (((NUM_NOTES as i32 - 1 + inversion_integral - i) / NUM_NOTES as i32) as u32)) as f32;
+            let transposition = 0.25
+                * (1i32
+                    << (((NUM_NOTES as i32 - 1 + inversion_integral - i) / NUM_NOTES as i32)
+                        as u32)) as f32;
             let target_voice = (i - num_rotations).rem_euclid(NUM_VOICES as i32) as usize;
             let previous_voice = (target_voice as i32 - 1).rem_euclid(NUM_VOICES as i32) as usize;
 

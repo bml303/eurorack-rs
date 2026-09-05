@@ -52,6 +52,7 @@ fn compute_registration(registration: f32, amplitudes: &mut [f32; NUM_HARMONICS 
     }
 }
 
+#[derive(Debug)]
 pub struct ChordEngine {
     divide_down_voice: [StringSynthOscillator; NUM_VOICES],
     wavetable_voice: [WavetableOscillator; NUM_VOICES],
@@ -113,9 +114,9 @@ impl Engine for ChordEngine {
         let harmonics7: [f32; 7] = harmonics[..7].try_into().unwrap();
 
         let mut ratios = [0.0f32; NUM_VOICES];
-        let aux_note_mask = self
-            .chords
-            .compute_chord_inversion(self.timbre_lp, &mut ratios, &mut note_amplitudes);
+        let aux_note_mask =
+            self.chords
+                .compute_chord_inversion(self.timbre_lp, &mut ratios, &mut note_amplitudes);
 
         out.fill(0.0);
         aux.fill(0.0);

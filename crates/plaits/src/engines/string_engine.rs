@@ -3,30 +3,37 @@
 //! frequency the player was dialing in ~14 samples ago (compensates trigger
 //! jitter from external sequencers).
 
+extern crate alloc;
+
+use alloc::boxed::Box;
+use alloc::vec;
+
 use stmlib::DelayLine;
 
-use crate::dsp::MAX_BLOCK_SIZE;
-use crate::engine::{note_to_frequency, trigger_state, Engine, EngineParameters, PostProcessingSettings};
+use crate::engine::{
+    note_to_frequency, trigger_state, Engine, EngineParameters, PostProcessingSettings,
+};
 use crate::physical_modelling::StringVoice;
 
 const NUM_STRINGS: usize = 3;
 
+#[derive(Default, Debug)]
 pub struct StringEngine {
     voice: [StringVoice; NUM_STRINGS],
     f0: [f32; NUM_STRINGS],
     f0_delay: DelayLine<16>,
     active_string: usize,
-    temp_buffer: [f32; MAX_BLOCK_SIZE],
+    temp_buffer: Box<[f32]>,
 }
 
-impl Default for StringEngine {
-    fn default() -> Self {
+impl StringEngine {
+    pub fn new(block_size: usize) -> Self {
         Self {
             voice: Default::default(),
             f0: [0.01; NUM_STRINGS],
             f0_delay: DelayLine::default(),
             active_string: NUM_STRINGS - 1,
-            temp_buffer: [0.0; MAX_BLOCK_SIZE],
+            temp_buffer: vec![0.0; block_size].into_boxed_slice(),
         }
     }
 }

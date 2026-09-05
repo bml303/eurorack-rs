@@ -1,17 +1,35 @@
 //! `plaits/dsp/engine/modal_engine.h` -- one voice of modal (mallet)
 //! synthesis.
 
+extern crate alloc;
+
+use alloc::boxed::Box;
+use alloc::vec;
+
 use stmlib::fdsp::one_pole;
 
-use crate::dsp::MAX_BLOCK_SIZE;
-use crate::engine::{note_to_frequency, trigger_state, Engine, EngineParameters, PostProcessingSettings};
+use crate::engine::{
+    note_to_frequency, trigger_state, Engine, EngineParameters, PostProcessingSettings,
+};
 use crate::physical_modelling::ModalVoice;
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct ModalEngine {
     voice: ModalVoice,
-    temp_buffer: [f32; MAX_BLOCK_SIZE],
+    temp_buffer_1: Box<[f32]>,
+    temp_buffer_2: Box<[f32]>,
     harmonics_lp: f32,
+}
+
+impl ModalEngine {
+    pub fn new(block_size: usize) -> Self {
+        Self {
+            voice: ModalVoice::default(),
+            temp_buffer_1: vec![0.0; block_size].into_boxed_slice(),
+            temp_buffer_2: vec![0.0; block_size].into_boxed_slice(),
+            harmonics_lp: 0.0,
+        }
+    }
 }
 
 impl Engine for ModalEngine {
@@ -47,7 +65,8 @@ impl Engine for ModalEngine {
             self.harmonics_lp,
             parameters.timbre,
             parameters.morph,
-            &mut self.temp_buffer[..size],
+            &mut &mut self.temp_buffer_1[..size],
+            &mut &mut self.temp_buffer_2[..size],
             out,
             aux,
         );

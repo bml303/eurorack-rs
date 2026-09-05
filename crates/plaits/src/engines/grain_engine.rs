@@ -8,7 +8,7 @@ use stmlib::units::semitones_to_ratio;
 use crate::engine::{note_to_frequency, Engine, EngineParameters, PostProcessingSettings};
 use crate::oscillator::{GrainletOscillator, ZOscillator};
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct GrainEngine {
     grainlet: [GrainletOscillator; 2],
     z_oscillator: ZOscillator,
@@ -47,8 +47,7 @@ impl Engine for GrainEngine {
             0.0
         };
         let carrier_bleed_fixed = carrier_bleed * (2.0 - carrier_bleed);
-        let carrier_shape =
-            0.33 + (parameters.morph - 0.33) * (1.0 - f0 * 24.0).max(0.0);
+        let carrier_shape = 0.33 + (parameters.morph - 0.33) * (1.0 - f0 * 24.0).max(0.0);
 
         self.grainlet[0].render(f0, f1, carrier_shape, carrier_bleed_fixed, out);
         self.grainlet[1].render(f0, f1 * ratio, carrier_shape, carrier_bleed_fixed, aux);

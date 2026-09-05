@@ -2,9 +2,11 @@
 //! (`out`) alongside a naive synthetic (909-ish) one (`aux`).
 
 use crate::drums::{AnalogSnareDrum, SyntheticSnareDrum};
-use crate::engine::{note_to_frequency, trigger_state, Engine, EngineParameters, PostProcessingSettings};
+use crate::engine::{
+    note_to_frequency, trigger_state, Engine, EngineParameters, PostProcessingSettings,
+};
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct SnareDrumEngine {
     analog_snare_drum: AnalogSnareDrum,
     synthetic_snare_drum: SyntheticSnareDrum,

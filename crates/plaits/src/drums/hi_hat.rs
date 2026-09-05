@@ -18,7 +18,7 @@ use crate::oscillator::{Oscillator, OscillatorShape};
 
 /// 808-style "metallic noise": 6 square oscillators (nominal f0 414 Hz),
 /// summed as a 1-bit-per-oscillator counter.
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct SquareNoise {
     phase: [u32; 6],
 }
@@ -50,6 +50,7 @@ impl SquareNoise {
 }
 
 /// "KR-55/FM"-style metallic noise: 3 ring-modulated square*saw oscillator pairs.
+#[derive(Debug)]
 pub struct RingModNoise {
     oscillator: [Oscillator; 6],
 }
@@ -100,12 +101,24 @@ pub enum MetallicNoise {
     RingMod,
 }
 
+impl Default for MetallicNoise {
+    fn default() -> Self {
+        Self::Square
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Vca {
     /// `SwingVCA`.
     Swing,
     /// `LinearVCA`.
     Linear,
+}
+
+impl Default for Vca {
+    fn default() -> Self {
+        Self::Swing
+    }
 }
 
 #[inline]
@@ -120,6 +133,7 @@ fn apply_vca(vca: Vca, s: f32, gain: f32) -> f32 {
     }
 }
 
+#[derive(Default, Debug)]
 pub struct HiHat {
     source: MetallicNoise,
     vca: Vca,
@@ -196,13 +210,19 @@ impl HiHat {
         }
 
         // Band-pass the metallic noise.
-        let cutoff = (150.0 / SAMPLE_RATE * semitones_to_ratio(tone * 72.0)).clamp(0.0, 16_000.0 / SAMPLE_RATE);
+        let cutoff = (150.0 / SAMPLE_RATE * semitones_to_ratio(tone * 72.0))
+            .clamp(0.0, 16_000.0 / SAMPLE_RATE);
         self.noise_coloration_svf.set_f_q(
             cutoff,
-            if self.resonance { 3.0 + 3.0 * tone } else { 1.0 },
+            if self.resonance {
+                3.0 + 3.0 * tone
+            } else {
+                1.0
+            },
             FrequencyApproximation::Accurate,
         );
-        self.noise_coloration_svf.process_in_place(FilterMode::BandPass, out);
+        self.noise_coloration_svf
+            .process_in_place(FilterMode::BandPass, out);
 
         // Not part of the 808 circuit, but adds variety: blend in a variable
         // amount of clocked noise.
@@ -220,19 +240,24 @@ impl HiHat {
 
         // Apply the VCA.
         let size = out.len();
-        let mut sustain_gain = ParameterInterpolator::new(&mut self.sustain_gain, accent * decay, size);
+        let mut sustain_gain =
+            ParameterInterpolator::new(&mut self.sustain_gain, accent * decay, size);
         for o in out.iter_mut() {
             self.envelope *= if self.envelope > 0.5 || !self.two_stage_envelope {
                 envelope_decay
             } else {
                 cut_decay
             };
-            let gain = if sustain { sustain_gain.next() } else { self.envelope };
+            let gain = if sustain {
+                sustain_gain.next()
+            } else {
+                self.envelope
+            };
             *o = apply_vca(self.vca, *o, gain);
         }
 
-        self.hpf.set_f_q(cutoff, 0.5, FrequencyApproximation::Accurate);
+        self.hpf
+            .set_f_q(cutoff, 0.5, FrequencyApproximation::Accurate);
         self.hpf.process_in_place(FilterMode::HighPass, out);
     }
 }
-

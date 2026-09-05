@@ -2,10 +2,12 @@
 //! (`out`, overdriven) alongside a naive synthetic one (`aux`).
 
 use crate::drums::{AnalogBassDrum, SyntheticBassDrum};
-use crate::engine::{note_to_frequency, trigger_state, Engine, EngineParameters, PostProcessingSettings};
+use crate::engine::{
+    note_to_frequency, trigger_state, Engine, EngineParameters, PostProcessingSettings,
+};
 use crate::fx::Overdrive;
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct BassDrumEngine {
     analog_bass_drum: AnalogBassDrum,
     synthetic_bass_drum: SyntheticBassDrum,

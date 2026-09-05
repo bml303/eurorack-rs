@@ -11,7 +11,7 @@ use stmlib::units::semitones_to_ratio;
 use crate::engine::{note_to_frequency, Engine, EngineParameters, PostProcessingSettings};
 use crate::oscillator::VariableShapeOscillator;
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct VirtualAnalogVcfEngine {
     svf: [Svf; 2],
     oscillator: VariableShapeOscillator,
@@ -79,8 +79,10 @@ impl Engine for VirtualAnalogVcfEngine {
         let mut gain = (parameters.harmonics - 0.7) + 0.85;
         gain = gain.clamp(0.7 - resonance_sqr * 0.3, 1.0);
 
-        let mut sub_gain_modulation = ParameterInterpolator::new(&mut self.previous_sub_gain, sub_gain, size);
-        let mut cutoff_modulation = ParameterInterpolator::new(&mut self.previous_cutoff, cutoff, size);
+        let mut sub_gain_modulation =
+            ParameterInterpolator::new(&mut self.previous_sub_gain, sub_gain, size);
+        let mut cutoff_modulation =
+            ParameterInterpolator::new(&mut self.previous_cutoff, cutoff, size);
         let mut stage2_gain_modulation =
             ParameterInterpolator::new(&mut self.previous_stage2_gain, stage2_gain, size);
         let mut q_modulation = ParameterInterpolator::new(&mut self.previous_q, q, size);
@@ -97,7 +99,8 @@ impl Engine for VirtualAnalogVcfEngine {
             let gain = gain_modulation.next();
             let input = soft_clip((out[i] + aux[i] * sub_gain_modulation.next()) * gain);
 
-            let (lp, hp) = self.svf[0].process_dual(FilterMode::LowPass, FilterMode::HighPass, input);
+            let (lp, hp) =
+                self.svf[0].process_dual(FilterMode::LowPass, FilterMode::HighPass, input);
 
             let mut lp = soft_clip(lp * gain);
             lp += stage2_gain * (soft_clip(self.svf[1].process(FilterMode::LowPass, lp)) - lp);

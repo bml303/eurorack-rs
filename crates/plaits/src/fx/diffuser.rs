@@ -10,14 +10,36 @@ const SIZE: usize = 8192;
 // `Reserve<126, Reserve<180, Reserve<269, Reserve<444, Reserve<1653,
 // Reserve<2010, Reserve<3411>>>>>>>` (each tap's `base` is the previous tap's
 // `base + length + 1`).
-const AP1: Tap = Tap { base: 0, length: 126 };
-const AP2: Tap = Tap { base: 127, length: 180 };
-const AP3: Tap = Tap { base: 308, length: 269 };
-const AP4: Tap = Tap { base: 578, length: 444 };
-const DAPA: Tap = Tap { base: 1023, length: 1653 };
-const DAPB: Tap = Tap { base: 2677, length: 2010 };
-const DEL: Tap = Tap { base: 4688, length: 3411 };
+const AP1: Tap = Tap {
+    base: 0,
+    length: 126,
+};
+const AP2: Tap = Tap {
+    base: 127,
+    length: 180,
+};
+const AP3: Tap = Tap {
+    base: 308,
+    length: 269,
+};
+const AP4: Tap = Tap {
+    base: 578,
+    length: 444,
+};
+const DAPA: Tap = Tap {
+    base: 1023,
+    length: 1653,
+};
+const DAPB: Tap = Tap {
+    base: 2677,
+    length: 2010,
+};
+const DEL: Tap = Tap {
+    base: 4688,
+    length: 3411,
+};
 
+#[derive(Debug)]
 pub struct Diffuser {
     engine: FxBuffer<SIZE>,
     lp_decay: f32,

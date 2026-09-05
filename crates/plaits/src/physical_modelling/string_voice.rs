@@ -8,7 +8,7 @@ use stmlib::Random;
 use super::string::String;
 use crate::noise::dust;
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct StringVoice {
     excitation_filter: Svf,
     string: String,
@@ -49,11 +49,12 @@ impl StringVoice {
         if trigger || sustain {
             let range = 72.0;
             let f = 4.0 * f0;
-            let cutoff =
-                (f * semitones_to_ratio((brightness * (2.0 - brightness) - 0.5) * range)).min(0.499);
+            let cutoff = (f * semitones_to_ratio((brightness * (2.0 - brightness) - 0.5) * range))
+                .min(0.499);
             let q = if sustain { 1.0 } else { 0.5 };
             self.remaining_noise_samples = (1.0 / f0) as usize;
-            self.excitation_filter.set_f_q(cutoff, q, FrequencyApproximation::Dirty);
+            self.excitation_filter
+                .set_f_q(cutoff, q, FrequencyApproximation::Dirty);
         }
 
         if sustain {
@@ -74,7 +75,8 @@ impl StringVoice {
             temp.fill(0.0);
         }
 
-        self.excitation_filter.process_in_place(FilterMode::LowPass, temp);
+        self.excitation_filter
+            .process_in_place(FilterMode::LowPass, temp);
         for i in 0..temp.len() {
             aux[i] += temp[i];
         }
@@ -86,6 +88,7 @@ impl StringVoice {
         } else {
             0.0
         };
-        self.string.process(f0, non_linearity, brightness, damping, temp, out);
+        self.string
+            .process(f0, non_linearity, brightness, damping, temp, out);
     }
 }
