@@ -8,7 +8,6 @@
 //! fallback wave map the C also uses when its `user_data` pointer is null).
 
 use stmlib::fdsp::one_pole;
-use stmlib::parameter_interpolator::ParameterInterpolator;
 
 use crate::PostProcessingSettings;
 use crate::dsp::SAMPLE_RATE;

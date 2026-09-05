@@ -6,6 +6,7 @@
 /// `Interpolate(table, index, size)` -- `index` in `[0, 1)`, scaled by `size`.
 #[inline]
 pub fn interpolate(table: &[f32], index: f32, size: f32) -> f32 {
+    let index = index.clamp(0.0, 1.0);
     let index = index * size;
     let integral = index as i32;
     let fractional = index - integral as f32;
@@ -17,6 +18,7 @@ pub fn interpolate(table: &[f32], index: f32, size: f32) -> f32 {
 /// `InterpolateHermite(table, index, size)` -- 4-point (cubic) interpolation.
 #[inline]
 pub fn interpolate_hermite(table: &[f32], index: f32, size: f32) -> f32 {
+    let index = index.clamp(0.0, 1.0);
     let index = index * size;
     let integral = index as i32;
     let fractional = index - integral as f32;

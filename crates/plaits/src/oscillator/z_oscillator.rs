@@ -41,14 +41,17 @@ impl ZOscillator {
         }
 
         let size = out.len();
-        let mut f0m = ParameterInterpolator::new(&mut self.carrier_frequency, carrier_frequency, size);
-        let mut f1m = ParameterInterpolator::new(&mut self.formant_frequency, formant_frequency, size);
+        let mut f0m =
+            ParameterInterpolator::new(&mut self.carrier_frequency, carrier_frequency, size);
+        let mut f1m =
+            ParameterInterpolator::new(&mut self.formant_frequency, formant_frequency, size);
         let mut shape_m = ParameterInterpolator::new(&mut self.carrier_shape, carrier_shape, size);
         let mut mode_m = ParameterInterpolator::new(&mut self.mode, mode, size);
 
         let mut next_sample = self.next_sample;
 
         for o in out.iter_mut() {
+            #[allow(unused_assignments)]
             let mut reset_time = 0.0f32;
 
             let mut this_sample = next_sample;
@@ -74,7 +77,13 @@ impl ZOscillator {
                     shape_m.subsample(1.0 - reset_time),
                     mode_m.subsample(1.0 - reset_time),
                 );
-                let after = Self::z(carrier_phase_after, 0.0, 0.0, shape_m.subsample(1.0), mode_m.subsample(1.0));
+                let after = Self::z(
+                    carrier_phase_after,
+                    0.0,
+                    0.0,
+                    shape_m.subsample(1.0),
+                    mode_m.subsample(1.0),
+                );
 
                 let discontinuity = after - before;
                 this_sample += discontinuity * this_blep_sample(reset_time);
