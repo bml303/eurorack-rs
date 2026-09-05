@@ -30,11 +30,8 @@ pub fn sine_pm(phase: u32, pm: f32) -> f32 {
     const MAX_INDEX: i32 = 32;
     let offset = MAX_INDEX as f32;
     let scale = MAX_UINT32 / (MAX_INDEX as f32 * 2.0);
-
-    let phase = phase.wrapping_add(
-        ((pm + offset) * scale) as u32 * (MAX_INDEX as u32 * 2),
-    );
-
+    let phase =
+        phase.wrapping_add((((pm + offset) * scale) as u32).wrapping_mul(MAX_INDEX as u32 * 2));
     let integral = (phase >> (32 - SINE_LUT_BITS)) as usize;
     let fractional = (phase << SINE_LUT_BITS) as f32 / MAX_UINT32;
     let a = LUT_SINE[integral];
@@ -147,7 +144,13 @@ impl FastSineOscillator {
         self.render_internal(frequency, amplitude, out, None, Mode::Additive);
     }
 
-    pub fn render_quadrature(&mut self, frequency: f32, amplitude: f32, x: &mut [f32], y: &mut [f32]) {
+    pub fn render_quadrature(
+        &mut self,
+        frequency: f32,
+        amplitude: f32,
+        x: &mut [f32],
+        y: &mut [f32],
+    ) {
         self.render_internal(frequency, amplitude, x, Some(y), Mode::Quadrature);
     }
 
@@ -168,7 +171,8 @@ impl FastSineOscillator {
         };
 
         let size = out.len();
-        let mut epsilon = ParameterInterpolator::new(&mut self.epsilon, Self::fast_2_sin(frequency), size);
+        let mut epsilon =
+            ParameterInterpolator::new(&mut self.epsilon, Self::fast_2_sin(frequency), size);
         let mut am = ParameterInterpolator::new(&mut self.amplitude, amplitude, size);
         let mut x = self.x;
         let mut y = self.y;

@@ -6,7 +6,7 @@ use stmlib::fdsp::{interpolate, one_pole};
 
 use crate::downsampler::{Downsampler, OVERSAMPLING};
 use crate::dsp::A0;
-use crate::engine::{note_to_frequency, Engine, EngineParameters, PostProcessingSettings};
+use crate::engine::{Engine, EngineParameters, PostProcessingSettings, note_to_frequency};
 use crate::oscillator::sine_pm;
 use crate::resources::LUT_FM_FREQUENCY_QUANTIZER;
 use stmlib::parameter_interpolator::ParameterInterpolator;
@@ -16,11 +16,13 @@ pub struct FmEngine {
     carrier_phase: u32,
     modulator_phase: u32,
     sub_phase: u32,
+
     previous_carrier_frequency: f32,
     previous_modulator_frequency: f32,
     previous_amount: f32,
     previous_feedback: f32,
     previous_sample: f32,
+
     sub_fir: f32,
     carrier_fir: f32,
 }
@@ -39,7 +41,9 @@ impl Engine for FmEngine {
         self.carrier_fir = 0.0;
     }
 
-    fn reset(&mut self) {}
+    fn reset(&mut self) {
+        self.init();
+    }
 
     fn load_user_data(&mut self, _user_data: Option<&'static [u8]>) {}
 
@@ -51,6 +55,7 @@ impl Engine for FmEngine {
         already_enveloped: bool,
     ) -> bool {
         let size = out.len();
+        // -- 4x oversampling
         let note = parameters.note - 24.0;
 
         let ratio = interpolate(&LUT_FM_FREQUENCY_QUANTIZER, parameters.harmonics, 128.0);
@@ -86,9 +91,7 @@ impl Engine for FmEngine {
         let mut carrier_downsampler = Downsampler::new(&mut self.carrier_fir);
         let mut sub_downsampler = Downsampler::new(&mut self.sub_fir);
 
-        const MAX_UINT32: f32 = 4_294_967_296.0;
-
-        for i in 0..size {
+        for (out_sample, aux_sample) in out.iter_mut().zip(aux.iter_mut()) {
             let amount = amount_modulation.next();
             let feedback = feedback_modulation.next();
             let phase_feedback = if feedback < 0.0 {
@@ -96,13 +99,13 @@ impl Engine for FmEngine {
             } else {
                 0.0
             };
-            let carrier_increment = (MAX_UINT32 * carrier_frequency.next()) as u32;
-            let modulator_frequency_now = modulator_frequency.next();
+            let carrier_increment = (4294967296.0 * carrier_frequency.next()) as u32;
+            let _modulator_frequency = modulator_frequency.next();
 
             for j in 0..OVERSAMPLING {
                 self.modulator_phase = self.modulator_phase.wrapping_add(
-                    (MAX_UINT32
-                        * modulator_frequency_now
+                    (4294967296.0
+                        * _modulator_frequency
                         * (1.0 + self.previous_sample * phase_feedback)) as u32,
                 );
                 self.carrier_phase = self.carrier_phase.wrapping_add(carrier_increment);
@@ -120,8 +123,8 @@ impl Engine for FmEngine {
                 sub_downsampler.accumulate(j, sub);
             }
 
-            out[i] = carrier_downsampler.read();
-            aux[i] = sub_downsampler.read();
+            *out_sample = carrier_downsampler.read();
+            *aux_sample = sub_downsampler.read();
         }
         already_enveloped
     }
