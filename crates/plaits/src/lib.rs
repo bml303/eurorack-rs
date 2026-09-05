@@ -34,11 +34,13 @@ pub mod dsp;
 pub mod engine;
 pub mod engines;
 pub mod envelope;
+pub mod fm;
 pub mod fx;
 pub mod noise;
 pub mod oscillator;
 pub mod physical_modelling;
 pub mod resources;
+pub mod utils;
 pub mod voice;
 
 pub use engine::{Engine, EngineParameters, PostProcessingSettings};
