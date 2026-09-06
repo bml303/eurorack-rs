@@ -1,6 +1,6 @@
 [package]
 name = "mi-clouds"
-description = "Rust port of Mutable Instruments Clouds (Granular texture synthesizer). SCAFFOLD -- DSP not yet ported."
+description = "Rust port of Mutable Instruments Clouds (granular texture synthesizer)."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -13,3 +13,7 @@ path = "src/lib.rs"
 
 [dependencies]
 mi-stmlib.workspace = true
+libm = "0.2"
+
+[dev-dependencies]
+libm = "0.2"

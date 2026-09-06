@@ -3,10 +3,12 @@
 This workspace turns the Mutable Instruments firmware DSP into `no_std` Rust
 libraries. `mi-braids` is fully ported and verified; it is the template for
 fixed-point modules (most of them — the MI Cortex-M3 modules). `mi-plaits`
-is the template for a floating-point module (hardware-FPU Cortex-M4F/F3):
-its fidelity contract is different (see "`mi-plaits` status" below) — no
-bit-exact arithmetic to preserve, so the port is ordinary idiomatic Rust
-throughout.
+and `mi-clouds` are the templates for floating-point modules (hardware-FPU
+Cortex-M4F/F3): their fidelity contract is different (see the status sections
+below) — no bit-exact arithmetic to preserve, so the port is ordinary
+idiomatic Rust throughout, though any genuinely integer-exact sub-parts
+(phase accumulators, bit-twiddling correlators, companding) are still kept
+verbatim.
 
 ## Scope of each crate
 
@@ -106,3 +108,35 @@ Verification: `cargo test -p mi-braids --test equivalence` (47/48 shapes;
 ## `mi-plaits` status
 
 Ported (24 engine models working) — floating point, so no bit-exactness contract applies.
+
+## `mi-clouds` status
+
+Fully ported — floating point (Cortex-M4F), so like `plaits` no bit-exactness
+contract applies; the integer-exact pieces (phase accumulators, the sign-bit
+`Correlator`, `mu_law`, the `ShyFft` and phase words) are still translated
+verbatim.
+
+* `PlaybackMode::Granular`, `::Stretch` (WSOLA), `::LoopingDelay`,
+  `::Spectral` (phase vocoder) — all working.
+* `fx`: `Diffuser`, `Reverb` (12-bit), `PitchShifter`, plus the shared
+  `FxEngine` accumulator machine — working.
+* `GranularProcessor` — feedback path, low-fidelity 2x resampling + 8-bit
+  mu-law buffer, diffusion / pitch-shift / tone-filter / reverb post chain,
+  dry/wet.
+* Spectral pulled `stmlib::fft::ShyFft` (the `RotationPhasor` variant) and
+  `stmlib::atan` (`fast_atan2r` + `atan_lut`) into `mi-stmlib`.
+
+Verification: `tools/clouds_compare.cc` + `examples/clouds_compare.rs` +
+`tools/wav_diff.py`. 13 of 16 (mode × quality) dumps are bit-identical to the
+C firmware DSP — every Granular and every Spectral render; `LoopingDelay`
+q0/q1 differ by ≤ 1 LSB on ≤ 2 of 96000 samples, and mono `Stretch` diverges
+into a different-but-valid WSOLA splice near the end of a 3 s render (1-ULP
+flip of a correlator comparison). `tests/equivalence.rs` locks the Rust
+output as a CI regression guard; `mi-stmlib` has a `ShyFft` round-trip test.
+
+**Bug in the C reproduced with a fix:** `clouds/dsp/window.h`'s `Window::Start`
+originally set `done_ = false` *twice*; two "remove duplicate assignment"
+commits (`fbb53ba`, `0e3756f`, merged March 2023 in `d1d8839`) removed both,
+so a freshly started window is permanently `done()` and Stretch mode is silent
+in any host build (`clouds_test.cc` only tests Granular / LoopingDelay). The
+port reinstates the assignment; the C reference needs the same one-line fix.
