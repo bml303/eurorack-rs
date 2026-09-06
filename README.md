@@ -9,7 +9,7 @@ modules](https://github.com/pichenettes/eurorack) to `no_std` library crates.
 |------------------|----------------------------------------------|-------|
 | `mi-stmlib`      | shared DSP library (`stmlib`)                | **ported** — primitives Braids/Plaits need, plus generally-useful helpers; tested |
 | `mi-braids`      | Braids macro-oscillator (~48 models)         | **ported — reference crate**; 47/48 models verified **bit-identical** to the C firmware DSP |
-| `mi-plaits`      | Plaits macro-oscillator (24 models)          | **ported**, floating-point (no bit-exactness contract); 22/24 models real, `SixOpEngine`/`SpeechEngine` are documented silent stubs — see [`crates/plaits/PORTING.md`](crates/plaits/PORTING.md) |
+| `mi-plaits`      | Plaits macro-oscillator (24 models)          | **ported**, floating-point (no bit-exactness contract); 24 models working |
 | `mi-clouds` … `mi-yarns` (14 more) | one crate per remaining module | **scaffold** — `Cargo.toml` + `lib.rs` + a per-crate `PORTING.md` source inventory |
 
 `braids` is the worked example every fixed-point module port should follow;
