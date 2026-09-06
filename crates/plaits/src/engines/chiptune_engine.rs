@@ -2,15 +2,15 @@
 //! triangle waveforms, either arpeggiated over the current chord when
 //! clocked (a trigger patched) or rendered as a plain chord otherwise.
 
+use stmlib::HysteresisQuantizer2;
 use stmlib::fdsp::one_pole;
 use stmlib::units::semitones_to_ratio;
-use stmlib::HysteresisQuantizer2;
 
 use super::arpeggiator::{Arpeggiator, ArpeggiatorMode};
 use crate::chords::{ChordBank, NUM_NOTES, NUM_VOICES};
 use crate::dsp::SAMPLE_RATE;
 use crate::engine::{
-    note_to_frequency, trigger_state, Engine, EngineParameters, PostProcessingSettings,
+    Engine, EngineParameters, PostProcessingSettings, note_to_frequency, trigger_state,
 };
 use crate::oscillator::{NesTriangleOscillator, SuperSquareOscillator};
 
@@ -40,7 +40,7 @@ impl Default for ChiptuneEngine {
             chords: ChordBank::default(),
             arpeggiator: Arpeggiator::default(),
             arpeggiator_pattern_selector: HysteresisQuantizer2::default(),
-            envelope_shape: NO_ENVELOPE,
+            envelope_shape: 0.0,
             envelope_state: 0.0,
             aux_envelope_amount: 0.0,
         }
@@ -85,16 +85,15 @@ impl Engine for ChiptuneEngine {
         aux: &mut [f32],
         _already_enveloped: bool,
     ) -> bool {
-        let size = out.len();
         let f0 = note_to_frequency(parameters.note);
         let shape = parameters.morph * 0.995;
-        let clocked = parameters.trigger & trigger_state::UNPATCHED == 0;
+        let clocked = parameters.trigger != trigger_state::UNPATCHED;
         let mut root_transposition = 1.0f32;
 
         let already_enveloped = clocked;
 
         if clocked {
-            if parameters.trigger & trigger_state::RISING_EDGE != 0 {
+            if parameters.trigger == trigger_state::RISING_EDGE {
                 self.chords.set_chord(parameters.harmonics);
                 self.chords.sort();
 
@@ -105,7 +104,7 @@ impl Engine for ChiptuneEngine {
                 self.arpeggiator.clock(self.chords.num_notes());
                 self.envelope_state = 1.0;
             }
-            let octave = (1i32 << self.arpeggiator.octave()) as f32;
+            let octave = (1 << self.arpeggiator.octave()) as f32;
             let note_f0 = f0 * self.chords.sorted_ratio(self.arpeggiator.note() as usize) * octave;
             root_transposition = octave;
             self.voice[0].render(note_f0, shape, out);
@@ -121,16 +120,15 @@ impl Engine for ChiptuneEngine {
             }
 
             out.fill(0.0);
-            for voice in 0..NUM_VOICES {
-                let voice_f0 = f0 * ratios[voice];
-                self.voice[voice].render(voice_f0, shape, aux);
-                for j in 0..size {
-                    out[j] += aux[j] * amplitudes[voice];
+            for (n, voice) in self.voice.iter_mut().enumerate() {
+                let voice_f0 = f0 * ratios[n];
+                voice.render(voice_f0, shape, aux);
+                for (out_sample, aux_sample) in out.iter_mut().zip(aux.iter_mut()) {
+                    *out_sample += *aux_sample * amplitudes[n];
                 }
             }
         }
 
-        // Render bass note.
         self.bass.render(f0 * 0.5 * root_transposition, aux);
 
         // Apply envelope if necessary.
@@ -139,11 +137,11 @@ impl Engine for ChiptuneEngine {
             let decay = 1.0 - 2.0 / SAMPLE_RATE * semitones_to_ratio(60.0 * shape) * shape;
             let aux_envelope_amount = (self.envelope_shape * 20.0).clamp(0.0, 1.0);
 
-            for i in 0..size {
+            for (out_sample, aux_sample) in out.iter_mut().zip(aux.iter_mut()) {
                 one_pole(&mut self.aux_envelope_amount, aux_envelope_amount, 0.01);
                 self.envelope_state *= decay;
-                out[i] *= self.envelope_state;
-                aux[i] *= 1.0 + self.aux_envelope_amount * (self.envelope_state - 1.0);
+                *out_sample *= self.envelope_state;
+                *aux_sample *= 1.0 + self.aux_envelope_amount * (self.envelope_state - 1.0);
             }
         }
 

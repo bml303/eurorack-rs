@@ -7,7 +7,9 @@
 //! of a C++ template parameter.
 
 use stmlib::parameter_interpolator::ParameterInterpolator;
-use stmlib::polyblep::{next_blep_sample, next_integrated_blep_sample, this_blep_sample, this_integrated_blep_sample};
+use stmlib::polyblep::{
+    next_blep_sample, next_integrated_blep_sample, this_blep_sample, this_integrated_blep_sample,
+};
 
 #[derive(Debug, Clone, Copy)]
 pub struct NesTriangleOscillator {
@@ -130,7 +132,12 @@ impl NesTriangleOscillator {
             self.step = next_step;
 
             // Contribution from the NES triangle.
-            next_sample += nes_gain * (if self.step < half { self.step } else { top - self.step }) as f32;
+            next_sample += nes_gain
+                * (if self.step < half {
+                    self.step
+                } else {
+                    top - self.step
+                }) as f32;
 
             // Contribution from the naive triangle.
             next_sample += tri_gain
