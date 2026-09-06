@@ -1,82 +1,90 @@
 # Porting Clouds
 
-**Granular texture synthesizer**  |  MCU family: `stm32f4`  |  ~7529 lines of hand-written C (excl. resources & drivers)
+**Granular texture synthesizer**  |  MCU: `stm32f4` (Cortex-M4F, hardware FPU)
 
-## Method
+## Status: ported (time-domain modes) + verified
 
-Follow the `braids` crate as the worked example:
+Clouds runs almost entirely in floating point, so -- like `plaits`, unlike
+`braids` -- there is **no fixed-point bit-exactness contract**. The port is
+idiomatic Rust; the few integer-exact pieces (phase accumulators, the sign-bit
+correlator, mu-law companding) are translated verbatim.
 
-1. `python tools/transpile_resources.py ../eurorack/clouds/resources.cc \
-       ../eurorack/clouds/resources.h crates/clouds/src/resources.rs`
-2. Port `mi-stmlib` primitives this module needs (check its `#include`s) if not
-   already present.
-3. Translate the DSP files below. Preserve fixed-point arithmetic verbatim
-   (use `wrapping_*`); modernise *structure* only -- modules, methods, enums,
-   `match` instead of function-pointer tables.
-4. Add `examples/render_wav.rs` mirroring `clouds/test/*_test.cc` and diff the
-   output WAV against the C test with `tools/wav_diff.py`.
-
-## Source inventory (DSP + UI, drivers/bootloader/resources excluded)
-
-| file | lines |
+| area | state |
 |------|-------|
-| `clouds.cc` | 137 |
-| `cv_scaler.cc` | 215 |
-| `cv_scaler.h` | 156 |
-| `meter.h` | 84 |
-| `settings.cc` | 89 |
-| `settings.h` | 113 |
-| `ui.cc` | 392 |
-| `ui.h` | 130 |
-| `dsp/audio_buffer.h` | 302 |
-| `dsp/correlator.cc` | 88 |
-| `dsp/correlator.h` | 88 |
-| `dsp/frame.h` | 44 |
-| `dsp/grain.h` | 205 |
-| `dsp/granular_processor.cc` | 465 |
-| `dsp/granular_processor.h` | 215 |
-| `dsp/granular_sample_player.h` | 256 |
-| `dsp/looping_sample_player.h` | 206 |
-| `dsp/mu_law.cc` | 69 |
-| `dsp/mu_law.h` | 83 |
-| `dsp/parameters.h` | 68 |
-| `dsp/sample_rate_converter.h` | 96 |
-| `dsp/window.h` | 122 |
-| `dsp/wsola_sample_player.h` | 290 |
-| `dsp/pvoc/frame_transformation.cc` | 361 |
-| `dsp/pvoc/frame_transformation.h` | 100 |
-| `dsp/pvoc/phase_vocoder.cc` | 107 |
-| `dsp/pvoc/phase_vocoder.h` | 76 |
-| `dsp/pvoc/stft.cc` | 210 |
-| `dsp/pvoc/stft.h` | 116 |
-| `dsp/fx/diffuser.h` | 112 |
-| `dsp/fx/fx_engine.h` | 302 |
-| `dsp/fx/pitch_shifter.h` | 116 |
-| `dsp/fx/reverb.h` | 180 |
-| `test/clouds_test.cc` | 230 |
-| `drivers/adc.cc` | 116 |
-| `drivers/adc.h` | 72 |
-| `drivers/codec.cc` | 564 |
-| `drivers/codec.h` | 102 |
-| `drivers/debug_pin.h` | 76 |
-| `drivers/debug_port.cc` | 64 |
-| `drivers/debug_port.h` | 68 |
-| `drivers/gate_input.cc` | 60 |
-| `drivers/gate_input.h` | 72 |
-| `drivers/leds.cc` | 100 |
-| `drivers/leds.h` | 109 |
-| `drivers/switches.cc` | 69 |
-| `drivers/switches.h` | 77 |
-| `drivers/system.cc` | 43 |
-| `drivers/system.h` | 52 |
-| `drivers/version.h` | 62 |
+| `resources` (13 LUTs + 3 pointer tables) | transpiled |
+| `AudioBuffer` (16-bit + 8-bit mu-law), `mu_law` | ported |
+| `Grain`, `Window`, `Correlator`, `SampleRateConverter` | ported |
+| `PlaybackMode::Granular` (`granular_sample_player`) | ported |
+| `PlaybackMode::Stretch` (`wsola_sample_player`) | ported |
+| `PlaybackMode::LoopingDelay` (`looping_sample_player`) | ported |
+| `fx`: `FxEngine`, `Diffuser`, `Reverb`, `PitchShifter` | ported |
+| `GranularProcessor` (feedback, SRC, post chain, dry/wet) | ported |
+| `PlaybackMode::Spectral` (`pvoc/` + `stmlib` `ShyFFT`) | **not ported** -- silent stub |
+| firmware (`cv_scaler`, `ui`, `settings`, persistence, drivers) | out of scope |
 
-## Resources
+### Verification
 
-`clouds/resources.cc` (2983 lines of generated lookup tables) -> transpile with `tools/transpile_resources.py` into `src/resources.rs`, exactly as done for `braids`.
+`tools/clouds_compare.cc` links the C DSP; `examples/clouds_compare.rs` runs the same
+deterministic sweep in Rust; `tools/wav_diff.py` diffs the two. As of the port,
+of the 12 (mode x quality) dumps:
 
-## Not in scope for the library crate
+* **9 are bit-identical** to the C firmware DSP.
+* `LoopingDelay` q0/q1 differ by **<= 1 LSB on <= 2 of 96000 samples**
+  (`semitones_to_ratio` / `tan` last-bit rounding, then the pitch-shifter).
+* `Stretch` q1 (mono) tracks bit-identically for ~1450 of 1500 blocks, then a
+  1-ULP difference flips a correlator `xcorr > best_score` comparison and the
+  WSOLA splice points diverge -- audible from that point, but "a different
+  valid grain", not wrong. The stereo run stays bit-identical throughout.
 
-STM32/AVR peripheral drivers (`drivers/`), the audio bootloader, and the
-`hardware_design/` files stay in the C repo -- the Rust crate is a `no_std`
-DSP library that a host or an embedded HAL feeds.
+`tests/equivalence.rs` folds a hash of the Rust dumps into a golden so CI
+catches accidental DSP changes without the C toolchain.
+
+### Deviations from the C
+
+* **`Window::Start` restores `done_ = false`.** Upstream Clouds had this
+  assignment *twice* in `clouds/dsp/window.h`; two near-simultaneous "remove
+  duplicate assignment" commits (`fbb53ba`, `0e3756f`) merged in `d1d8839`
+  (March 2023) removed **both** copies. Without it a freshly `Start`ed window
+  is permanently `done()` and Stretch mode is silent in any host build
+  (`clouds_test.cc` only exercises Granular / LoopingDelay). The port
+  reinstates the assignment; `clouds_compare.cc` needs the same one-line fix
+  to produce a non-silent Stretch reference:
+
+  ```
+  # in ../eurorack/clouds/dsp/window.h, Window::Start(), after `phase_ = 0;`
+  +    done_ = false;
+  ```
+
+* **The `Correlator` and `PitchShifter` get separate buffers.** The firmware
+  aliases them into one region of the `BufferAllocator` workspace (they run in
+  mutually exclusive modes). The port gives each its own owned buffer -- a RAM
+  optimisation with no audible effect.
+
+* **Out-of-bounds table / tail reads are clamped.** `AudioBuffer::read_*`
+  (`integral` outside `[0, 2*size)`), `dsp::interpolate` (`table[N+1]` at
+  `index == 1.0` for the `N+1`-entry LUTs), and the `AudioBuffer` cross-fade
+  tail (`tail_[256]`) are all one-past-the-end reads in the C that land on
+  adjacent statics; every one is multiplied by a zero coefficient there, so
+  clamping to the last valid entry is identical.
+
+## Rebuilding resources
+
+```
+python3 tools/transpile_resources.py \
+    ../eurorack/clouds/resources.cc ../eurorack/clouds/resources.h \
+    crates/clouds/src/resources.rs
+```
+
+`lut_ulaw` lives in `clouds/dsp/mu_law.cc` (not `resources.cc`); it is
+hand-copied into `src/mu_law.rs`.
+
+## Finishing the port: Spectral mode
+
+1. Port `stmlib/fft/shy_fft.h` into `mi-stmlib` (`ShyFFT<f32, 4096>` -- the
+   `RotationPhasor` variant; header-only, ~450 lines).
+2. Port `clouds/dsp/pvoc/{stft,frame_transformation,phase_vocoder}` +
+   `stmlib/dsp/atan.h` (`fast_atan2r` + `atan_lut`).
+3. Wire `PhaseVocoder` into `GranularProcessor::{prepare, process_granular}`
+   in place of the `PlaybackMode::Spectral` stub, and give it the
+   `BufferAllocator`-carved buffers the C `Prepare()` computes.
+4. Extend `clouds_compare.rs` / `clouds_compare.cc` with the spectral dumps.

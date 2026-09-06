@@ -6,20 +6,23 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A Rust workspace porting the DSP of Mutable Instruments' Eurorack firmware (the C
 repo at `../eurorack`) to `no_std` library crates — one crate per module plus
-`mi-stmlib` for the shared code. `mi-braids` is fully ported and bit-verified
-against the C; the other 15 module crates are scaffolds (`Cargo.toml` +
-`lib.rs` + `PORTING.md` inventory). Read `PORTING.md` before porting anything —
-it has the fidelity contract and the verification workflow.
+`mi-stmlib` for the shared code. `mi-braids` (fixed-point, bit-verified),
+`mi-plaits` and `mi-clouds` (floating-point) are ported; the other 13 module
+crates are scaffolds (`Cargo.toml` + `lib.rs` + `PORTING.md` inventory). Read
+`PORTING.md` before porting anything — it has the fidelity contract and the
+verification workflow.
 
 ## Commands
 
 ```
 cargo build --workspace
-cargo test  --workspace                 # includes crates/braids/tests/equivalence.rs
+cargo test  --workspace                 # braids + clouds equivalence goldens, plaits/clouds smoke
 cargo test  -p mi-braids --test equivalence   # the C-parity golden test
 cargo clippy --workspace
 cargo run --release --example render_wav -p mi-braids -- [shape_slug | --all]
 cargo run --release --example compare   -p mi-braids -- <out_dir>   # dumps NN.pcm per shape
+cargo run --release --example clouds_wav     -p mi-clouds -- [granular|stretch|looping|spectral]
+cargo run --release --example clouds_compare -p mi-clouds -- <out_dir>   # dumps MM.pcm per (mode,quality)
 ```
 
 Verifying a port against the C requires `../eurorack` with submodules
@@ -53,6 +56,12 @@ The exact command lines are in `README.md`.
   above note ~127, `RenderWaveLine` at max timbre) that this port clamps. The
   equivalence test skips `WaveLine` and caps the pitch sweep at note 120 for
   this reason.
+- **Clouds Stretch fix:** `mi-clouds` reinstates `done_ = false` in
+  `Window::Start` — upstream Clouds deleted it (a botched "remove duplicate
+  assignment" merge, March 2023), silently breaking Stretch mode in host
+  builds. `tools/clouds_compare.cc` needs the same one-line C fix to verify.
+  See `crates/clouds/PORTING.md`. Spectral (phase-vocoder) mode is not ported —
+  it is a silent stub.
 
 ## Adding real DSP to a scaffold crate
 
