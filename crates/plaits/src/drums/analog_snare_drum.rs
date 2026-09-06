@@ -2,11 +2,11 @@
 //! modes excited by a trigger pulse, mixed with filtered noise gated by a
 //! `snappy` envelope.
 
+use stmlib::Random;
 use stmlib::fdsp::{one_pole, soft_clip};
 use stmlib::filter::{FilterMode, FrequencyApproximation, Svf};
 use stmlib::parameter_interpolator::ParameterInterpolator;
 use stmlib::units::semitones_to_ratio;
-use stmlib::Random;
 
 use crate::dsp::SAMPLE_RATE;
 use crate::oscillator::SineOscillator;
@@ -109,7 +109,7 @@ impl AnalogSnareDrum {
 
         for o in out.iter_mut() {
             // Q45 / Q46
-            let mut pulse;
+            let pulse;
             if self.pulse_remaining_samples != 0 {
                 self.pulse_remaining_samples -= 1;
                 pulse = if self.pulse_remaining_samples != 0 {
