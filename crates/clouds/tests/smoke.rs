@@ -1,17 +1,18 @@
-//! Every time-domain playback mode, at every quality, must survive a long
-//! parameter sweep (with freeze / trigger toggling and mode switches) without
-//! panicking -- no out-of-bounds buffer reads, no divide-by-zero, no bad
-//! `f32 -> i16` conversion. This is a crash smoke test, not a numerical one.
+//! Every playback mode, at every quality, must survive a long parameter sweep
+//! (with freeze / trigger / gate toggling and mode switches) without panicking
+//! -- no out-of-bounds buffer reads, no divide-by-zero, no bad `f32 -> i16`
+//! conversion. This is a crash smoke test, not a numerical one.
 
 use clouds::{GranularProcessor, PlaybackMode, ShortFrame};
 
 const BLOCK: usize = 32;
 
-fn modes() -> [PlaybackMode; 3] {
+fn modes() -> [PlaybackMode; 4] {
     [
         PlaybackMode::Granular,
         PlaybackMode::Stretch,
         PlaybackMode::LoopingDelay,
+        PlaybackMode::Spectral,
     ]
 }
 
@@ -105,19 +106,46 @@ fn mode_switching_mid_stream_is_safe() {
 }
 
 #[test]
-fn spectral_mode_is_silent_not_a_panic() {
+fn spectral_mode_produces_audio() {
     let mut gp = GranularProcessor::new();
     gp.set_quality(0);
     gp.set_playback_mode(PlaybackMode::Spectral);
-    gp.prepare();
-    let input = [ShortFrame { l: 9000, r: 9000 }; BLOCK];
-    let mut output = [ShortFrame { l: 1, r: 1 }; BLOCK];
-    gp.prepare();
-    gp.process(&input, &mut output);
-    // previous_playback_mode transitions leave the first block silent; run a
-    // few more and confirm no panic and (dry/wet defaulting to 0) near silence.
-    for _ in 0..10 {
-        gp.prepare();
-        gp.process(&input, &mut output);
+    {
+        let p = gp.mutable_parameters();
+        p.position = 0.5;
+        p.size = 0.5;
+        p.density = 0.6;
+        p.texture = 0.5;
+        p.dry_wet = 1.0;
     }
+    for _ in 0..32 {
+        gp.prepare();
+    }
+
+    let mut phase = 0.0f32;
+    let mut energy = 0.0f64;
+    let mut count = 0u64;
+    for _ in 0..600 {
+        let mut input = [ShortFrame::default(); BLOCK];
+        for f in input.iter_mut() {
+            phase += 200.0 / 32000.0;
+            if phase >= 1.0 {
+                phase -= 1.0;
+            }
+            let s = ((phase - 0.5) * 18000.0) as i16;
+            f.l = s;
+            f.r = s;
+        }
+        let mut output = [ShortFrame::default(); BLOCK];
+        gp.process(&input, &mut output);
+        for _ in 0..32 {
+            gp.prepare();
+        }
+        for f in output {
+            energy += (f.l as f64).powi(2);
+            count += 1;
+        }
+    }
+    let rms = (energy / count as f64).sqrt();
+    assert!(rms > 100.0, "spectral mode output too quiet: rms {rms}");
 }

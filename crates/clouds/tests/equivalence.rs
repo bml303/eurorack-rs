@@ -8,9 +8,10 @@
 //!
 //! The real fidelity check is manual: build `tools/clouds_compare.cc`, run
 //! both renderers, and diff with `tools/wav_diff.py` (see `PORTING.md`). As of
-//! the port, 9 of 12 dumps are bit-identical to the C firmware DSP, 2 more
-//! differ by <= 1 LSB on <= 2 of 96000 samples, and mono Stretch diverges
-//! into a different-but-valid WSOLA splice late in the run.
+//! the port, 13 of 16 dumps are bit-identical to the C firmware DSP (all of
+//! Granular and Spectral), 2 more differ by <= 1 LSB on <= 2 of 96000
+//! samples, and mono Stretch diverges into a different-but-valid WSOLA splice
+//! late in the run.
 
 use clouds::{GranularProcessor, PlaybackMode, ShortFrame};
 use stmlib::Random;
@@ -18,10 +19,11 @@ use stmlib::Random;
 const BLOCK: usize = 32;
 const BLOCKS: usize = 1500;
 
-const MODES: [PlaybackMode; 3] = [
+const MODES: [PlaybackMode; 4] = [
     PlaybackMode::Granular,
     PlaybackMode::Stretch,
     PlaybackMode::LoopingDelay,
+    PlaybackMode::Spectral,
 ];
 
 fn tri(x: f32) -> f32 {
@@ -93,8 +95,8 @@ fn render(mode: PlaybackMode, quality: i32) -> u64 {
 
 #[test]
 fn dsp_output_is_unchanged() {
-    // mode-major: [granular q0..3, stretch q0..3, looping q0..3]
-    const EXPECTED: [u64; 12] = [
+    // mode-major: [granular q0..3, stretch q0..3, looping q0..3, spectral q0..3]
+    const EXPECTED: [u64; 16] = [
         0xf73e2c87f045dcf3,
         0x154a3a7f4073f8e2,
         0x220a9248f375cc95,
@@ -107,9 +109,13 @@ fn dsp_output_is_unchanged() {
         0xfdf87447a81061dc,
         0x2cd00776d98a04ce,
         0x424016a15d6d2298,
+        0x8ba03dfa8961f280,
+        0x2c2e213ff47525e1,
+        0xf9a7fd762a09226a,
+        0xeac6ab9df52c94a1,
     ];
 
-    let mut actual = [0u64; 12];
+    let mut actual = [0u64; 16];
     for (mode_idx, mode) in MODES.into_iter().enumerate() {
         for quality in 0..4usize {
             actual[mode_idx * 4 + quality] = render(mode, quality as i32);

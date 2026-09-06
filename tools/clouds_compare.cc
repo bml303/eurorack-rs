@@ -36,10 +36,11 @@ static const int kBlocks = 1500;
 // the WSOLA correlator search is spread across those calls.
 static const int kPrepareIters = 32;
 
-static const PlaybackMode kModes[3] = {
+static const PlaybackMode kModes[4] = {
     PLAYBACK_MODE_GRANULAR,
     PLAYBACK_MODE_STRETCH,
     PLAYBACK_MODE_LOOPING_DELAY,
+    PLAYBACK_MODE_SPECTRAL,
 };
 
 static float tri(float x) {
@@ -54,7 +55,7 @@ static uint8_t small_buffer[65536 - 128];
 int main(int argc, char** argv) {
   const char* out_dir = argc > 1 ? argv[1] : ".";
 
-  for (int mode_idx = 0; mode_idx < 3; ++mode_idx) {
+  for (int mode_idx = 0; mode_idx < 4; ++mode_idx) {
     for (int quality = 0; quality < 4; ++quality) {
       Random::Seed(0x21);
 

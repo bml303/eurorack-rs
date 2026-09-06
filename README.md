@@ -10,7 +10,7 @@ modules](https://github.com/pichenettes/eurorack) to `no_std` library crates.
 | `mi-stmlib`      | shared DSP library (`stmlib`)                | **ported** — primitives Braids/Plaits need, plus generally-useful helpers; tested |
 | `mi-braids`      | Braids macro-oscillator (~48 models)         | **ported — reference crate**; 47/48 models verified **bit-identical** to the C firmware DSP |
 | `mi-plaits`      | Plaits macro-oscillator (24 models)          | **ported**, floating-point (no bit-exactness contract); 24 models working |
-| `mi-clouds`      | Clouds granular texture synthesizer          | **ported**, floating-point; Granular / Stretch / Looping-Delay + all FX; 9/12 (mode×quality) dumps bit-identical to the C, 2 more within 1 LSB. Spectral mode is a documented silent stub |
+| `mi-clouds`      | Clouds granular texture synthesizer          | **ported**, floating-point; all 4 playback modes (Granular / Stretch / Looping-Delay / Spectral) + all FX; 13/16 (mode×quality) dumps bit-identical to the C, 2 more within 1 LSB |
 | `mi-branches` … `mi-yarns` (13 more) | one crate per remaining module | **scaffold** — `Cargo.toml` + `lib.rs` + a per-crate `PORTING.md` source inventory |
 
 `braids` is the worked example every fixed-point module port should follow;
@@ -31,7 +31,8 @@ crates/
                                    fx, physical_modelling, chords, drums,
                                    envelope, resources (transpiled tables)
   clouds/            mi-clouds   — granular_processor, granular/wsola/looping
-                                   players, grain, window, correlator, fx
+                                   players, pvoc (stft, frame_transformation,
+                                   phase_vocoder), grain, window, correlator, fx
                                    (diffuser, reverb, pitch_shifter), audio_buffer,
                                    mu_law, resources (transpiled tables)
   <module>/          mi-<module> — scaffold + PORTING.md
@@ -100,10 +101,10 @@ cargo run --release --example clouds_compare -p mi-clouds -- /tmp/rust_pcm
 python3 tools/wav_diff.py /tmp/c_pcm /tmp/rust_pcm
 ```
 
-9 of the 12 (mode × quality) dumps are byte-identical; 2 more differ by 1 LSB on
-≤ 2 of 96000 samples, and the last (mono Stretch) diverges into a different but
-valid WSOLA splice near the end of the run — see
-[`crates/clouds/PORTING.md`](crates/clouds/PORTING.md).
+13 of the 16 (mode × quality) dumps are byte-identical — every Granular and
+Spectral render; 2 more differ by 1 LSB on ≤ 2 of 96000 samples, and the last
+(mono Stretch) diverges into a different but valid WSOLA splice near the end of
+the run — see [`crates/clouds/PORTING.md`](crates/clouds/PORTING.md).
 
 ## License
 

@@ -17,3 +17,20 @@ pub fn interpolate(table: &[f32], index: f32, size: f32) -> f32 {
     let b = *table.get(integral + 1).unwrap_or(&a);
     a + (b - a) * fractional
 }
+
+/// `stmlib::Interpolate` **verbatim** -- no clamping of `index`. The phase
+/// vocoder calls it on scratch buffers with `size = 1.0` and an `index` that
+/// ranges over the whole spectrum, so the `[0, 1]` clamp `crate::dsp` /
+/// `stmlib::fdsp` apply would be wrong. The index is clamped only to stay in
+/// bounds of `table` (the C reads one past there in a couple of warp edge
+/// cases -- a latent firmware OOB).
+#[inline]
+pub fn interpolate_raw(table: &[f32], index: f32, size: f32) -> f32 {
+    let index = index * size;
+    let raw_integral = index as i32;
+    let fractional = index - raw_integral as f32;
+    let integral = raw_integral.clamp(0, table.len() as i32 - 2) as usize;
+    let a = table[integral];
+    let b = table[integral + 1];
+    a + (b - a) * fractional
+}

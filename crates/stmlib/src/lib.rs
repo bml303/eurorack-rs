@@ -18,9 +18,11 @@
 #![no_std]
 #![allow(clippy::excessive_precision)]
 
+pub mod atan;
 pub mod cosine_oscillator;
 pub mod delay_line;
 pub mod fdsp;
+pub mod fft;
 pub mod filter;
 pub mod fixed;
 pub mod gate_flags;

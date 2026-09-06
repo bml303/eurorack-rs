@@ -30,10 +30,11 @@ const BLOCKS: usize = 1500;
 /// sound.
 const PREPARE_ITERS: usize = 32;
 
-const MODES: [PlaybackMode; 3] = [
+const MODES: [PlaybackMode; 4] = [
     PlaybackMode::Granular,
     PlaybackMode::Stretch,
     PlaybackMode::LoopingDelay,
+    PlaybackMode::Spectral,
 ];
 
 fn tri(x: f32) -> f32 {

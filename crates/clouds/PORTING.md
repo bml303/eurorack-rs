@@ -2,12 +2,13 @@
 
 **Granular texture synthesizer**  |  MCU: `stm32f4` (Cortex-M4F, hardware FPU)
 
-## Status: ported (time-domain modes) + verified
+## Status: fully ported + verified
 
 Clouds runs almost entirely in floating point, so -- like `plaits`, unlike
 `braids` -- there is **no fixed-point bit-exactness contract**. The port is
-idiomatic Rust; the few integer-exact pieces (phase accumulators, the sign-bit
-correlator, mu-law companding) are translated verbatim.
+idiomatic Rust; the integer-exact pieces (phase accumulators, the sign-bit
+correlator, mu-law companding, the `ShyFft` and phase words) are translated
+verbatim.
 
 | area | state |
 |------|-------|
@@ -17,18 +18,20 @@ correlator, mu-law companding) are translated verbatim.
 | `PlaybackMode::Granular` (`granular_sample_player`) | ported |
 | `PlaybackMode::Stretch` (`wsola_sample_player`) | ported |
 | `PlaybackMode::LoopingDelay` (`looping_sample_player`) | ported |
+| `PlaybackMode::Spectral` (`pvoc/{stft,frame_transformation,phase_vocoder}`) | ported |
+| `stmlib::fft::ShyFft` (`RotationPhasor`), `stmlib::atan` | ported into `mi-stmlib` |
 | `fx`: `FxEngine`, `Diffuser`, `Reverb`, `PitchShifter` | ported |
 | `GranularProcessor` (feedback, SRC, post chain, dry/wet) | ported |
-| `PlaybackMode::Spectral` (`pvoc/` + `stmlib` `ShyFFT`) | **not ported** -- silent stub |
 | firmware (`cv_scaler`, `ui`, `settings`, persistence, drivers) | out of scope |
 
 ### Verification
 
-`tools/clouds_compare.cc` links the C DSP; `examples/clouds_compare.rs` runs the same
-deterministic sweep in Rust; `tools/wav_diff.py` diffs the two. As of the port,
-of the 12 (mode x quality) dumps:
+`tools/clouds_compare.cc` links the C DSP; `examples/clouds_compare.rs` runs
+the same deterministic sweep in Rust; `tools/wav_diff.py` diffs the two. Of
+the 16 (mode x quality) dumps:
 
-* **9 are bit-identical** to the C firmware DSP.
+* **13 are bit-identical** to the C firmware DSP -- every Granular and every
+  Spectral render, plus stereo Stretch and LoopingDelay q2/q3.
 * `LoopingDelay` q0/q1 differ by **<= 1 LSB on <= 2 of 96000 samples**
   (`semitones_to_ratio` / `tan` last-bit rounding, then the pitch-shifter).
 * `Stretch` q1 (mono) tracks bit-identically for ~1450 of 1500 blocks, then a
@@ -36,8 +39,9 @@ of the 12 (mode x quality) dumps:
   WSOLA splice points diverge -- audible from that point, but "a different
   valid grain", not wrong. The stereo run stays bit-identical throughout.
 
-`tests/equivalence.rs` folds a hash of the Rust dumps into a golden so CI
-catches accidental DSP changes without the C toolchain.
+`tests/equivalence.rs` folds a hash of the 16 Rust dumps into a golden so CI
+catches accidental DSP changes without the C toolchain. `mi-stmlib` has a
+`ShyFft` round-trip test.
 
 ### Deviations from the C
 
@@ -60,12 +64,21 @@ catches accidental DSP changes without the C toolchain.
   mutually exclusive modes). The port gives each its own owned buffer -- a RAM
   optimisation with no audible effect.
 
+* **The phase-vocoder buffers are owned, not carved from a `void*` slab.**
+  `PhaseVocoder::init` reproduces the firmware `BufferAllocator` texture-count
+  arithmetic (7 textures mono, 3 stereo) from the fixed slab sizes, then
+  allocates each STFT / `FrameTransformation` buffer directly. The FFT scratch
+  is a `Vec<f32>` pair; the C's `float* <-> uint32_t*` phase-word pun becomes
+  `f32::{from,to}_bits` on those slots, which is bit-identical.
+
 * **Out-of-bounds table / tail reads are clamped.** `AudioBuffer::read_*`
   (`integral` outside `[0, 2*size)`), `dsp::interpolate` (`table[N+1]` at
-  `index == 1.0` for the `N+1`-entry LUTs), and the `AudioBuffer` cross-fade
-  tail (`tail_[256]`) are all one-past-the-end reads in the C that land on
-  adjacent statics; every one is multiplied by a zero coefficient there, so
-  clamping to the last valid entry is identical.
+  `index == 1.0` for the `N+1`-entry LUTs), `dsp::interpolate_raw` (warp
+  indices past the spectrum), the `AudioBuffer` cross-fade tail (`tail_[256]`),
+  and the STFT circular index (spill past `buffer_size` for non-32 blocks) are
+  all one-past-the-end reads in the C that land on adjacent memory; each is
+  multiplied by a zero coefficient (or never happens for 32-sample blocks), so
+  clamping / wrapping is identical.
 
 ## Rebuilding resources
 
@@ -76,15 +89,5 @@ python3 tools/transpile_resources.py \
 ```
 
 `lut_ulaw` lives in `clouds/dsp/mu_law.cc` (not `resources.cc`); it is
-hand-copied into `src/mu_law.rs`.
-
-## Finishing the port: Spectral mode
-
-1. Port `stmlib/fft/shy_fft.h` into `mi-stmlib` (`ShyFFT<f32, 4096>` -- the
-   `RotationPhasor` variant; header-only, ~450 lines).
-2. Port `clouds/dsp/pvoc/{stft,frame_transformation,phase_vocoder}` +
-   `stmlib/dsp/atan.h` (`fast_atan2r` + `atan_lut`).
-3. Wire `PhaseVocoder` into `GranularProcessor::{prepare, process_granular}`
-   in place of the `PlaybackMode::Spectral` stub, and give it the
-   `BufferAllocator`-carved buffers the C `Prepare()` computes.
-4. Extend `clouds_compare.rs` / `clouds_compare.cc` with the spectral dumps.
+hand-copied into `src/mu_law.rs`. `atan_lut` is hand-copied into
+`crates/stmlib/src/atan.rs`.

@@ -111,25 +111,28 @@ Ported (24 engine models working) — floating point, so no bit-exactness contra
 
 ## `mi-clouds` status
 
-Ported — floating point (Cortex-M4F), so like `plaits` no bit-exactness
+Fully ported — floating point (Cortex-M4F), so like `plaits` no bit-exactness
 contract applies; the integer-exact pieces (phase accumulators, the sign-bit
-`Correlator`, `mu_law`) are still translated verbatim.
+`Correlator`, `mu_law`, the `ShyFft` and phase words) are still translated
+verbatim.
 
-* `PlaybackMode::Granular`, `::Stretch` (WSOLA), `::LoopingDelay` — working.
+* `PlaybackMode::Granular`, `::Stretch` (WSOLA), `::LoopingDelay`,
+  `::Spectral` (phase vocoder) — all working.
 * `fx`: `Diffuser`, `Reverb` (12-bit), `PitchShifter`, plus the shared
   `FxEngine` accumulator machine — working.
 * `GranularProcessor` — feedback path, low-fidelity 2x resampling + 8-bit
   mu-law buffer, diffusion / pitch-shift / tone-filter / reverb post chain,
   dry/wet.
-* `PlaybackMode::Spectral` — **not ported**; selecting it is silent. Needs
-  `stmlib`'s `ShyFFT` plus `pvoc/{stft,frame_transformation,phase_vocoder}`.
+* Spectral pulled `stmlib::fft::ShyFft` (the `RotationPhasor` variant) and
+  `stmlib::atan` (`fast_atan2r` + `atan_lut`) into `mi-stmlib`.
 
 Verification: `tools/clouds_compare.cc` + `examples/clouds_compare.rs` +
-`tools/wav_diff.py`. 9 of 12 (mode × quality) dumps are bit-identical to the C
-firmware DSP; `LoopingDelay` q0/q1 differ by ≤ 1 LSB on ≤ 2 of 96000 samples,
-and mono `Stretch` diverges into a different-but-valid WSOLA splice near the
-end of a 3 s render (1-ULP flip of a correlator comparison).
-`tests/equivalence.rs` locks the Rust output as a CI regression guard.
+`tools/wav_diff.py`. 13 of 16 (mode × quality) dumps are bit-identical to the
+C firmware DSP — every Granular and every Spectral render; `LoopingDelay`
+q0/q1 differ by ≤ 1 LSB on ≤ 2 of 96000 samples, and mono `Stretch` diverges
+into a different-but-valid WSOLA splice near the end of a 3 s render (1-ULP
+flip of a correlator comparison). `tests/equivalence.rs` locks the Rust
+output as a CI regression guard; `mi-stmlib` has a `ShyFft` round-trip test.
 
 **Bug in the C reproduced with a fix:** `clouds/dsp/window.h`'s `Window::Start`
 originally set `done_ = false` *twice*; two "remove duplicate assignment"

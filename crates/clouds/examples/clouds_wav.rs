@@ -4,7 +4,7 @@
 //!   cargo run --release --example clouds_wav -p mi-clouds -- granular
 //!   cargo run --release --example clouds_wav -p mi-clouds -- stretch clouds.wav
 //!
-//! Modes: `granular` (default), `stretch`, `looping`, `spectral` (silent).
+//! Modes: `granular` (default), `stretch`, `looping`, `spectral`.
 
 use std::env;
 use std::fs::File;

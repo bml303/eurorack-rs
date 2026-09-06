@@ -10,23 +10,21 @@
 //! function-pointer / template dispatch, runtime enums instead of template
 //! parameters, owned buffers instead of the firmware's hand-partitioned
 //! `void*` slabs. The handful of genuinely integer-exact pieces (the phase
-//! accumulators, the sign-bit [`correlator`], [`mu_law`] companding) are
-//! translated verbatim. Verified against the C firmware DSP: 9 of the 12
-//! (playback mode x quality) renders are bit-identical, 2 more differ by 1 LSB
-//! on a handful of samples (see `PORTING.md`).
+//! accumulators, the sign-bit [`correlator`], [`mu_law`] companding, the
+//! [`ShyFft`](stmlib::fft::ShyFft) / phase words) are translated verbatim.
+//! Verified against the C firmware DSP: 13 of the 16 (playback mode x quality)
+//! renders are bit-identical -- all of Granular and Spectral -- 2 more differ
+//! by 1 LSB on a handful of samples, and mono Stretch diverges into a
+//! different-but-valid WSOLA splice late in the run (see `PORTING.md`).
 //!
-//! Ported and working -- the three time-domain playback modes and every
-//! post-processing effect:
+//! All four playback modes and every post-processing effect are ported:
 //!
 //! * [`PlaybackMode::Granular`] -- the cloud of overlapping grains.
 //! * [`PlaybackMode::Stretch`] -- WSOLA time-stretch / pitch-shift.
 //! * [`PlaybackMode::LoopingDelay`] -- the looping delay / tape mode.
+//! * [`PlaybackMode::Spectral`] -- the phase vocoder ([`pvoc`]).
 //! * [`fx`] -- the all-pass [`Diffuser`](fx::Diffuser),
 //!   [`Reverb`](fx::Reverb) and [`PitchShifter`](fx::PitchShifter).
-//!
-//! **Not yet ported:** [`PlaybackMode::Spectral`] (the phase-vocoder mode).
-//! Selecting it produces silence. It needs a port of `stmlib`'s `ShyFFT`
-//! plus `stft` / `frame_transformation`; see `PORTING.md`.
 //!
 //! # Memory
 //!
@@ -92,6 +90,7 @@ pub mod granular_processor;
 pub mod mu_law;
 pub mod parameters;
 pub mod players;
+pub mod pvoc;
 pub mod resources;
 pub mod sample_rate_converter;
 pub mod window;

@@ -60,8 +60,8 @@ The exact command lines are in `README.md`.
   `Window::Start` — upstream Clouds deleted it (a botched "remove duplicate
   assignment" merge, March 2023), silently breaking Stretch mode in host
   builds. `tools/clouds_compare.cc` needs the same one-line C fix to verify.
-  See `crates/clouds/PORTING.md`. Spectral (phase-vocoder) mode is not ported —
-  it is a silent stub.
+  See `crates/clouds/PORTING.md`. All four playback modes are ported, including
+  Spectral (`clouds::pvoc` + `stmlib::fft::ShyFft` + `stmlib::atan`).
 
 ## Adding real DSP to a scaffold crate
 

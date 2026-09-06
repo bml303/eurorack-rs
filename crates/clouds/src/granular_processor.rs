@@ -18,6 +18,7 @@ use crate::frame::{FloatFrame, ShortFrame, MAX_BLOCK_SIZE};
 use crate::fx::{Diffuser, PitchShifter, Reverb};
 use crate::parameters::Parameters;
 use crate::players::{GranularSamplePlayer, LoopingSamplePlayer, WSOLASamplePlayer};
+use crate::pvoc::PhaseVocoder;
 use crate::resources::{LUT_XFADE_IN, LUT_XFADE_OUT, SRC_FILTER_1X_2_45};
 use crate::sample_rate_converter::SampleRateConverter;
 
@@ -60,6 +61,7 @@ pub struct GranularProcessor {
     player: GranularSamplePlayer,
     ws_player: WSOLASamplePlayer,
     looper: LoopingSamplePlayer,
+    phase_vocoder: PhaseVocoder,
 
     diffuser: Diffuser,
     reverb: Reverb,
@@ -100,6 +102,7 @@ impl GranularProcessor {
             player: GranularSamplePlayer::new(),
             ws_player: WSOLASamplePlayer::new(),
             looper: LoopingSamplePlayer::new(),
+            phase_vocoder: PhaseVocoder::new(),
             diffuser: Diffuser::new(),
             reverb: Reverb::new(),
             pitch_shifter: PitchShifter::new(),
@@ -270,7 +273,7 @@ impl GranularProcessor {
             self.pitch_shifter.init();
 
             if self.playback_mode == PlaybackMode::Spectral {
-                // Phase-vocoder mode is not ported; leave the buffers idle.
+                self.phase_vocoder.init(self.num_channels);
             } else {
                 let resolution = self.resolution();
                 let sizes = [buffer_size_0, buffer_size_1];
@@ -296,7 +299,7 @@ impl GranularProcessor {
         }
 
         if self.playback_mode == PlaybackMode::Spectral {
-            // phase_vocoder_.Buffer();
+            self.phase_vocoder.buffer();
         } else if self.playback_mode == PlaybackMode::Stretch {
             let resolution = self.resolution();
             // Split the borrow: correlator + ws_player + one buffer array.
@@ -388,8 +391,30 @@ impl GranularProcessor {
                 self.looper.play(buffers, &params, &mut out_interleaved, size);
             }
             PlaybackMode::Spectral => {
-                // Not ported -- silence.
-                out_interleaved.fill(0.0);
+                // DENSITY / SIZE / TEXTURE are meta parameters in spectral mode.
+                self.parameters.spectral.quantization = self.parameters.texture;
+                self.parameters.spectral.refresh_rate = 0.01 + 0.99 * self.parameters.density;
+                let warp = self.parameters.size - 0.5;
+                self.parameters.spectral.warp = 4.0 * warp * warp * warp + 0.5;
+                let mut randomization = self.parameters.density - 0.5;
+                // C: `randomization *= randomization * 4.2f;` -- the RHS
+                // (`randomization * 4.2`) is evaluated first, so this is
+                // `r * (r * 4.2)`, not `(r * r) * 4.2`.
+                #[allow(clippy::misrefactored_assign_op)]
+                {
+                    randomization *= randomization * 4.2;
+                }
+                randomization -= 0.05;
+                self.parameters.spectral.phase_randomization = constrain(randomization, 0.0, 1.0);
+
+                let params = self.parameters;
+                self.phase_vocoder.process(&params, input, output, size);
+                if self.num_channels == 1 {
+                    for f in output.iter_mut().take(size) {
+                        f.r = f.l;
+                    }
+                }
+                return;
             }
         }
 
