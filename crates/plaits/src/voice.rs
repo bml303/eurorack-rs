@@ -124,16 +124,25 @@ impl ChannelPostProcessor {
 
 #[derive(Debug, Clone, Copy)]
 pub struct Patch {
+    // -- note number in the range from `-119.0` to `120.0`. Default is `48.0`.
     pub note: f32,
+    // -- HARMONICS parameter in the range from `0.0` to `1.0`. Default is `0.5`.
     pub harmonics: f32,
+    // -- TIMBRE parameter in the range from `0.0` to `1.0`. Default is `0.5`.
     pub timbre: f32,
+    // -- MORPH parameter in the range from `0.0` to `1.0`. Default is `0.5`.
     pub morph: f32,
+    // -- requency modulation amount in the range from `-1.0` to `1.0`. Default is `0.0`.
     pub frequency_modulation_amount: f32,
+    // -- TIMBRE modulation amount in the range from `-1.0` to `1.0`. Default is `0.0`.
     pub timbre_modulation_amount: f32,
+    // -- MORPH modulation amount in the range from `-1.0` to `1.0`. Default is `0.0`.
     pub morph_modulation_amount: f32,
-
+    // -- engine selection in the range from `0` to `23`. Default is `0`.
     pub engine: i32,
+    // -- envelope decay in the range from `0.0` to `1.0`. Default is `0.5`.
     pub decay: f32,
+    // -- Low-pass gate color in the range from `0.0` to `1.0`. Default is `0.5`.
     pub lpg_colour: f32,
 }
 
@@ -156,19 +165,31 @@ impl Default for Patch {
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Modulations {
+    // -- engine select modulation in the range from `-1.0` to `1.0`. Default is `0.0`.
     pub engine: f32,
+    // -- note number modulation in the range from `-119.0` to `120.0`. Default is `0.0`.
     pub note: f32,
+    // -- frequency modulation in the range from `-1.0` to `1.0`. Default is `0.0`.
     pub frequency: f32,
+    // -- HARMONICS modulation in the range from `-1.0` to `1.0`. Default is `0.0`.
     pub harmonics: f32,
+    // -- TIMBRE modulation in the range from `-1.0` to `1.0`. Default is `0.0`.
     pub timbre: f32,
+    // -- MORPH modulation in the range from `-1.0` to `1.0`. Default is `0.0`.
     pub morph: f32,
+    // -- Trigger signal in the range from `0.0` to `1.0`. Default is `0.0`.
     pub trigger: f32,
+    // -- Level modulation in the range from `0.0` to `1.0`. Default is `0.0`.
     pub level: f32,
-
+    // -- Flag if frequency modulation is applied. Default is `false`.
     pub frequency_patched: bool,
+    // -- Flag if timbre modulation is applied. Default is `false`.
     pub timbre_patched: bool,
+    // -- Flag if morph modulation is applied. Default is `false`.
     pub morph_patched: bool,
+    // -- Flag if trigger signal is used. Default is `false`.
     pub trigger_patched: bool,
+    // -- Flag if level modulation is used. Default is `false`.
     pub level_patched: bool,
 }
 
