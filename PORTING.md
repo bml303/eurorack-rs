@@ -105,11 +105,4 @@ Verification: `cargo test -p mi-braids --test equivalence` (47/48 shapes;
 
 ## `mi-plaits` status
 
-Ported (22 of 24 engine models real, 2 documented silent stubs) — floating
-point, so no bit-exactness contract applies (see `crates/plaits/PORTING.md`
-for the full writeup, the deviations from the C, and why `Parameter
-Interpolator` needed a `Drop`-based redesign along the way).
-
-Verification: `cargo test -p mi-plaits --test smoke` (every engine slot
-renders a parameter sweep without panicking; no numerical-tolerance golden
-test yet — see the crate's `PORTING.md`).
+Ported (24 engine models working) — floating point, so no bit-exactness contract applies.
