@@ -261,6 +261,17 @@ impl Svf {
         }
     }
 
+    /// `ProcessMultimode(buf, buf, size, mode)` -- the C's in-place form.
+    pub fn process_multimode_in_place(&mut self, buf: &mut [f32], mode: f32) {
+        let hp_gain = if mode < 0.5 { -mode * 2.0 } else { -2.0 + mode * 2.0 };
+        let lp_gain = if mode < 0.5 { 1.0 - mode * 2.0 } else { 0.0 };
+        let bp_gain = if mode < 0.5 { 0.0 } else { mode * 2.0 - 1.0 };
+        for s in buf.iter_mut() {
+            let (hp, bp, lp) = self.step(*s);
+            *s = hp_gain * hp + bp_gain * bp + lp_gain * lp;
+        }
+    }
+
     /// `ProcessMultimodeLPtoHP`: LP -> BP -> HP with a different crossfade law.
     pub fn process_multimode_lp_to_hp(&mut self, input: &[f32], out: &mut [f32], mode: f32) {
         let hp_gain = (-mode * 2.0 + 1.0).min(0.0);
@@ -350,6 +361,20 @@ impl NaiveSvf {
             FilterMode::BandPass => self.bp,
             FilterMode::BandPassNormalized => bp_normalized,
             FilterMode::HighPass => hp,
+        }
+    }
+
+    /// `Process<mode>(in, out, size)` -- block form, `in` and `out` distinct.
+    pub fn process_block(&mut self, mode: FilterMode, input: &[f32], out: &mut [f32]) {
+        for (i, o) in input.iter().zip(out.iter_mut()) {
+            *o = self.process(mode, *i);
+        }
+    }
+
+    /// `Process<mode>(buf, buf, size)` -- the C's common in-place call.
+    pub fn process_in_place(&mut self, mode: FilterMode, buf: &mut [f32]) {
+        for s in buf.iter_mut() {
+            *s = self.process(mode, *s);
         }
     }
 

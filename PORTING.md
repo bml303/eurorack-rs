@@ -140,3 +140,28 @@ commits (`fbb53ba`, `0e3756f`, merged March 2023 in `d1d8839`) removed both,
 so a freshly started window is permanently `done()` and Stretch mode is silent
 in any host build (`clouds_test.cc` only tests Granular / LoopingDelay). The
 port reinstates the assignment; the C reference needs the same one-line fix.
+
+## `mi-elements` status
+
+Ported — floating point (Cortex-M4F), same contract as `plaits` / `clouds`.
+The integer-exact pieces (exciter sample-player + granular phase accumulators,
+the Ominous FM operator phase words, `Random` draws) are translated verbatim.
+
+* `Part` — the top-level type (`kNumVoices == 1`): "space"-macro mix, soft
+  limiter, level meters, output reverb.
+* `Voice` — the MODAL router: 3 exciters (bow / blow / strike) + tube + input
+  diffuser feeding either the `Resonator` (64 modal + 8 bowed modes) or a bank
+  of 1 / 5 `String`s (STRING / STRINGS), each a Karplus-Strong loop with a FIR
+  damping filter and a dispersion all-pass / curved-bridge non-linearity.
+* `OminousVoice` — the hidden "Ominous" 2x2-op FM voice, 8x oversampled, IIR +
+  101-tap FIR downsampled, band-pass filtered, spatialised.
+* `fx` — the `FxEngine` accumulator machine (`elements/dsp/fx/fx_engine.h`,
+  a sibling of the clouds one), `Diffuser` (mono, 32-bit) and `Reverb` (16-bit).
+
+Verification: no C bit-compare (float port). `tests/smoke.rs` sweeps every
+resonator model + the Ominous voice through extreme parameters as a crash /
+NaN / OOB guard and checks each makes sound; `examples/elements_wav.rs` mirrors
+`elements_test.cc::TestPart`. Deviations from the C (in-bounds `Interpolate`
+clamps where the C reads one past a `size + 1` table, positive `InterpolateWrap`,
+`as i64 as u32` for the negative-float phase cast) are listed in
+`crates/elements/PORTING.md`.

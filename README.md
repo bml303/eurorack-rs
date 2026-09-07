@@ -11,7 +11,8 @@ modules](https://github.com/pichenettes/eurorack) to `no_std` library crates.
 | `mi-braids`      | Braids macro-oscillator (~48 models)         | **ported — reference crate**; 47/48 models verified **bit-identical** to the C firmware DSP |
 | `mi-plaits`      | Plaits macro-oscillator (24 models)          | **ported**, floating-point (no bit-exactness contract); 24 models working |
 | `mi-clouds`      | Clouds granular texture synthesizer          | **ported**, floating-point; all 4 playback modes (Granular / Stretch / Looping-Delay / Spectral) + all FX; 13/16 (mode×quality) dumps bit-identical to the C, 2 more within 1 LSB |
-| `mi-branches` … `mi-yarns` (13 more) | one crate per remaining module | **scaffold** — `Cargo.toml` + `lib.rs` + a per-crate `PORTING.md` source inventory |
+| `mi-elements`    | Elements modal / physical-modelling voice    | **ported**, floating-point (no bit-exactness contract); MODAL / STRING / STRINGS + the "Ominous" easter-egg voice + diffuser & reverb; smoke-tested |
+| `mi-branches` … `mi-yarns` (12 more) | one crate per remaining module | **scaffold** — `Cargo.toml` + `lib.rs` + a per-crate `PORTING.md` source inventory |
 
 `braids` is the worked example every fixed-point module port should follow;
 `plaits` is the worked example for a floating-point module (no bit-exactness
