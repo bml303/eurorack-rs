@@ -191,3 +191,32 @@ FNV-1a checksum of the output per shape. `examples/edges_wav.rs` renders an
 arpeggio from any oscillator. Deviations (index clamps where the C reads past
 `lut_res_oscillator_increments` / `waveform_table`, the new `render_square`) are
 in `crates/edges/PORTING.md`.
+
+## `mi-rings` status
+
+Ported — floating point (STM32F373, hardware FPU), same contract as `plaits` /
+`clouds` / `elements`. Integer-exact pieces (the FM operator phase words, the
+ensemble/chorus LFO table indices) translated verbatim.
+
+* `Part` — the resonator: **all six models** (modal, sympathetic string,
+  string, FM voice, quantised sympathetic string, string + reverb), 1-4 voice
+  polyphony, internal exciter (`Plucker`), the odd/even (or per-voice) output
+  routing, the string+reverb stereo blend.
+* `Strummer` + `OnsetDetector` — audio-onset / note-CV / trigger strum
+  detection with an inter-onset-interval inhibit.
+* `StringSynthPart` — "Disastrous Peace": a polyphonic PolyBLEP
+  string-ensemble / organ (`StringSynthOscillator`/`Voice`/`Envelope`) with a
+  formant filter, chorus, ensemble and reverb.
+* `fx` — the shared `FxEngine` accumulator machine (identical to
+  `mi-elements` / `mi-clouds`), `Reverb` (differs from Elements' only in the
+  modulated taps), `Chorus`, `Ensemble`.
+* `string.cc` is byte-identical to Elements' -- lifted from `mi-elements`.
+
+Out of scope: `cv_scaler`, `ui`, `settings`, the STM32 drivers, bootloader.
+
+Added `NaiveSvf::split` / `split_high_in_place` to `mi-stmlib`. No C
+bit-compare harness (float port; `rings_test.cc` needs external audio anyway).
+`tests/smoke.rs`: model x polyphony x exciter sweeps, `StringSynthPart` x every
+FX, a `Strummer` inhibit check, and an autocorrelation pitch check on STRING.
+Deviations (in-bounds `Interpolate` clamps, `as i64 as u32` FM phase cast,
+chord-index clamp) are in `crates/rings/PORTING.md`.
