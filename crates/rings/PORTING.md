@@ -1,84 +1,59 @@
-# Porting Rings
+# Rings -- port status
 
-**Modal / sympathetic-string resonator**  |  MCU family: `stm32f3`  |  ~8042 lines of hand-written C (excl. resources & drivers)
+**Modal / sympathetic-string resonator**  |  MCU family: `stm32f373` (hardware FPU)
 
-## Method
+## Status: PORTED (floating-point, no bit-exactness contract)
 
-Follow the `braids` crate as the worked example:
+Rings has an FPU, so -- like `mi-plaits` / `mi-clouds` / `mi-elements` -- this is
+an idiomatic floating-point port. The integer-exact pieces (the FM operator
+phase words, the ensemble/chorus LFO table indices) are translated verbatim.
 
-1. `python tools/transpile_resources.py ../eurorack/rings/resources.cc \
-       ../eurorack/rings/resources.h crates/rings/src/resources.rs`
-2. Port `mi-stmlib` primitives this module needs (check its `#include`s) if not
-   already present.
-3. Translate the DSP files below. Preserve fixed-point arithmetic verbatim
-   (use `wrapping_*`); modernise *structure* only -- modules, methods, enums,
-   `match` instead of function-pointer tables.
-4. Add `examples/render_wav.rs` mirroring `rings/test/*_test.cc` and diff the
-   output WAV against the C test with `tools/wav_diff.py`.
+### Modules
 
-## Source inventory (DSP + UI, drivers/bootloader/resources excluded)
+| Rust file | C source | notes |
+|-----------|----------|-------|
+| `src/resources.rs` | `resources.{cc,h}` | transpiled (`lut_sine` 5121, `lut_stiffness` / `lut_4_decades` / `lut_svf_shift` 257, `lut_fm_frequency_quantizer` 129) |
+| `src/string.rs` | `string.{h,cc}` | `string.cc` is byte-identical to Elements'; lifted from `mi-elements`, `set_dispersion` made a plain setter |
+| `src/resonator.rs` | `resonator.{h,cc}` | 64-mode bank, even modes -> `out`, odd -> `aux` |
+| `src/fm_voice.rs` + `src/follower.rs` | `fm_voice.{h,cc}`, `follower.h` | the "bonus" 2-op FM voice + its 3-band envelope/centroid follower |
+| `src/plucker.rs` | `plucker.h` | the internal exciter (noise burst + comb + LP) |
+| `src/note_filter.rs` | `note_filter.h` | median + adaptive-lag pitch filter |
+| `src/limiter.rs` | `limiter.h` | stereo peak limiter |
+| `src/onset_detector.rs` + `src/strummer.rs` | `onset_detector.h`, `strummer.h` | audio-onset strum detection |
+| `src/fx/{fx_engine,reverb,chorus,ensemble}.rs` | `fx/*.h` | `fx_engine` is the shared Dattorro machine (same as `mi-elements`/`mi-clouds`); `Reverb` differs from Elements' only in the modulated taps |
+| `src/part.rs` | `part.{h,cc}` + `patch.h` + `performance_state.h` | the 6-model router, 1-4 voice polyphony, chord tables, string+reverb blend |
+| `src/string_synth_{oscillator,envelope,voice,part}.rs` | `string_synth_*.{h,cc}` | "Disastrous Peace": a polyphonic PolyBLEP string-ensemble / organ with formant / chorus / ensemble / reverb |
 
-| file | lines |
-|------|-------|
-| `cv_scaler.cc` | 231 |
-| `cv_scaler.h` | 225 |
-| `meter.h` | 84 |
-| `rings.cc` | 167 |
-| `settings.cc` | 65 |
-| `settings.h` | 99 |
-| `ui.cc` | 454 |
-| `ui.h` | 124 |
-| `dsp/dsp.h` | 45 |
-| `dsp/fm_voice.cc` | 154 |
-| `dsp/fm_voice.h` | 126 |
-| `dsp/follower.h` | 112 |
-| `dsp/limiter.h` | 81 |
-| `dsp/note_filter.h` | 121 |
-| `dsp/onset_detector.h` | 228 |
-| `dsp/part.cc` | 578 |
-| `dsp/part.h` | 192 |
-| `dsp/patch.h` | 43 |
-| `dsp/performance_state.h` | 50 |
-| `dsp/plucker.h` | 93 |
-| `dsp/resonator.cc` | 122 |
-| `dsp/resonator.h` | 99 |
-| `dsp/string.cc` | 218 |
-| `dsp/string.h` | 169 |
-| `dsp/string_synth_envelope.h` | 144 |
-| `dsp/string_synth_oscillator.h` | 183 |
-| `dsp/string_synth_part.cc` | 442 |
-| `dsp/string_synth_part.h` | 141 |
-| `dsp/string_synth_voice.h` | 75 |
-| `dsp/strummer.h` | 103 |
-| `dsp/fx/chorus.h` | 119 |
-| `dsp/fx/ensemble.h` | 134 |
-| `dsp/fx/fx_engine.h` | 301 |
-| `dsp/fx/reverb.h` | 184 |
-| `test/rings_test.cc` | 572 |
-| `drivers/adc.cc` | 190 |
-| `drivers/adc.h` | 94 |
-| `drivers/codec.cc` | 562 |
-| `drivers/codec.h` | 102 |
-| `drivers/debug_pin.h` | 76 |
-| `drivers/debug_port.cc` | 64 |
-| `drivers/debug_port.h` | 68 |
-| `drivers/leds.cc` | 55 |
-| `drivers/leds.h` | 63 |
-| `drivers/normalization_probe.h` | 77 |
-| `drivers/switches.cc` | 59 |
-| `drivers/switches.h` | 73 |
-| `drivers/system.cc` | 45 |
-| `drivers/system.h` | 50 |
-| `drivers/trigger_input.cc` | 55 |
-| `drivers/trigger_input.h` | 67 |
-| `drivers/version.h` | 64 |
+Out of scope: `cv_scaler`, `ui`, `settings`, the STM32 drivers, the bootloader.
 
-## Resources
+### stmlib additions
 
-`rings/resources.cc` (1577 lines of generated lookup tables) -> transpile with `tools/transpile_resources.py` into `src/resources.rs`, exactly as done for `braids`.
+`NaiveSvf::split` and `NaiveSvf::split_high_in_place` (the C's `Split(in, low,
+high)` and its aliased `Split(in, low, in)` call).
 
-## Not in scope for the library crate
+### Deviations from the C
 
-STM32/AVR peripheral drivers (`drivers/`), the audio bootloader, and the
-`hardware_design/` files stay in the C repo -- the Rust crate is a `no_std`
-DSP library that a host or an embedded HAL feeds.
+* `stmlib::Interpolate` at full scale: the MI resource tables are `size + 1`
+  entries and the engines index them at `1.0` (`structure`, `damping`, `ratio`),
+  where the C reads one entry past the array saved only by a zero fraction. The
+  local `interpolate` helpers (`resonator.rs`, `fm_voice.rs`) and the chorus'
+  `interp_sine` clamp the index so the result is identical without the
+  out-of-bounds read.
+* `(uint32_t)negative_float` in the FM `SineFm` phase cast -> `as i64 as u32`
+  for the C's modular wrap (Rust's `as u32` saturates).
+* `performance_state.chord` is clamped to `0..=10` before indexing the chord
+  tables (the C does not clamp).
+
+### Verification
+
+No C bit-compare harness (float port; the C `rings_test.cc` needs external audio
+files anyway). `tests/smoke.rs`: every model x polyphony + external/internal
+exciter through an extreme sweep (finite / bounded / audible), `StringSynthPart`
+x every FX, a `Strummer` inhibit-timer check, bypass passthrough, and an
+autocorrelation pitch check on the STRING model (A3 within 10 Hz).
+`examples/rings_wav.rs` mirrors `rings_test.cc`:
+
+```
+cargo run --release --example rings_wav -p mi-rings -- \
+    [modal|sympathetic|string|fm|quantized|string_reverb|synth] [out.wav]
+```

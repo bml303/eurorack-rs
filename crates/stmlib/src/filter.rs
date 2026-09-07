@@ -378,6 +378,41 @@ impl NaiveSvf {
         }
     }
 
+    /// `Split(in, low, high, size)` -- one pass, low-pass into `low` and
+    /// high-pass into `high`.
+    pub fn split(&mut self, input: &[f32], low: &mut [f32], high: &mut [f32]) {
+        let (mut lp, mut bp) = (self.lp, self.bp);
+        for i in 0..input.len() {
+            let bp_normalized = bp * self.damp;
+            let notch = input[i] - bp_normalized;
+            lp += self.f * bp;
+            let hp = notch - lp;
+            bp += self.f * hp;
+            low[i] = lp;
+            high[i] = hp;
+        }
+        self.lp = lp;
+        self.bp = bp;
+    }
+
+    /// `Split(in, low, in, size)` -- the C's aliased call where the high-pass
+    /// output overwrites the input buffer in place (each sample is read before
+    /// it is overwritten).
+    pub fn split_high_in_place(&mut self, in_high: &mut [f32], low: &mut [f32]) {
+        let (mut lp, mut bp) = (self.lp, self.bp);
+        for i in 0..in_high.len() {
+            let bp_normalized = bp * self.damp;
+            let notch = in_high[i] - bp_normalized;
+            lp += self.f * bp;
+            let hp = notch - lp;
+            bp += self.f * hp;
+            low[i] = lp;
+            in_high[i] = hp;
+        }
+        self.lp = lp;
+        self.bp = bp;
+    }
+
     #[inline]
     pub fn lp(&self) -> f32 {
         self.lp

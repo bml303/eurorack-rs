@@ -13,6 +13,7 @@ modules](https://github.com/pichenettes/eurorack) to `no_std` library crates.
 | `mi-clouds`      | Clouds granular texture synthesizer          | **ported**, floating-point; all 4 playback modes (Granular / Stretch / Looping-Delay / Spectral) + all FX; 13/16 (mode×quality) dumps bit-identical to the C, 2 more within 1 LSB |
 | `mi-elements`    | Elements modal / physical-modelling voice    | **ported**, floating-point (no bit-exactness contract); MODAL / STRING / STRINGS + the "Ominous" easter-egg voice + diffuser & reverb; smoke-tested |
 | `mi-edges`       | Edges quad chiptune oscillator (AVR)         | **ported**, fixed-point; the sampled `DigitalOscillator` (6 shapes) + `TimerOscillator` (square-wave timer maths + a software square renderer); smoke-tested (no C harness — firmware is AVR-asm-only) |
+| `mi-rings`       | Rings modal / sympathetic-string resonator   | **ported**, floating-point (no bit-exactness contract); all 6 resonator models + `Strummer` + the "Disastrous Peace" string-synth easter egg (formant / chorus / ensemble / reverb); smoke-tested |
 | `mi-branches` … `mi-yarns` (11 more) | one crate per remaining module | **scaffold** — `Cargo.toml` + `lib.rs` + a per-crate `PORTING.md` source inventory |
 
 `braids` is the worked example every fixed-point module port should follow;
