@@ -12,7 +12,7 @@ use std::io::{BufWriter, Write};
 
 use clouds::{GranularProcessor, PlaybackMode, ShortFrame};
 
-const SAMPLE_RATE: u32 = 32_000;
+const SAMPLE_RATE: u32 = 48_000;
 const BLOCK: usize = 32;
 const SECONDS: u32 = 8;
 const PREPARE_ITERS: usize = 32;
