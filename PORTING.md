@@ -165,3 +165,29 @@ NaN / OOB guard and checks each makes sound; `examples/elements_wav.rs` mirrors
 clamps where the C reads one past a `size + 1` table, positive `InterpolateWrap`,
 `as i64 as u32` for the negative-float phase cast) are listed in
 `crates/elements/PORTING.md`.
+
+## `mi-edges` status
+
+Ported — fixed-point (8-bit AVR / ATxmega), `mi-braids`-style verbatim
+arithmetic: 24-bit phase accumulators, `u8`/`u16` wrap, table interpolation.
+
+* `DigitalOscillator` (channel 4, the only PCM output) — band-limited triangle,
+  NES triangle, pitched noise, NES noise long/short, bit-crushed sine.
+* `TimerOscillator` (channels 0..3) — the firmware's dual-slope-PWM timer
+  register maths (`period` / `value` / prescaler with its LFO-mode hysteresis,
+  `SubFollow`), plus a **new** `render_square` (software 2-level square from
+  those registers — the firmware uses a hardware PWM pin).
+
+Out of scope: the MIDI stack, `note_stack`, `voice_allocator`, `settings`,
+`ui`, `adc_acquisition`, bootloader.
+
+**No C bit-compare harness.** `digital_oscillator.cc`'s `InterpolateSample` is
+AVR inline assembly that indexes the 513-byte wavetables at `phase >> 7` with an
+even 8-bit blend weight; the *portable* `avrlibx` fallback (`phase >> 8`, which a
+host build would compile) disagrees and Edges never calls it. The port follows
+the firmware asm. `tests/smoke.rs` checks range / silence / audio for every
+shape, measured pitch tracking, `TimerOscillator` frequency + duty, and locks an
+FNV-1a checksum of the output per shape. `examples/edges_wav.rs` renders an
+arpeggio from any oscillator. Deviations (index clamps where the C reads past
+`lut_res_oscillator_increments` / `waveform_table`, the new `render_square`) are
+in `crates/edges/PORTING.md`.

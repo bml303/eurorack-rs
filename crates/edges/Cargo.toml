@@ -1,6 +1,6 @@
 [package]
 name = "mi-edges"
-description = "Rust port of Mutable Instruments Edges (Quad chiptune digital oscillator). SCAFFOLD -- DSP not yet ported."
+description = "Rust port of Mutable Instruments Edges: a quad chiptune oscillator (4 timer squares + 1 sampled digital oscillator)."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
