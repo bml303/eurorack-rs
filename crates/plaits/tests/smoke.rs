@@ -32,7 +32,7 @@ fn base_modulations() -> Modulations {
         harmonics: 0.0,
         timbre: 0.0,
         morph: 0.0,
-        trigger: 0.0,
+        trigger: 1.0,
         level: 0.8,
         frequency_patched: false,
         timbre_patched: false,
@@ -45,7 +45,7 @@ fn base_modulations() -> Modulations {
 #[test]
 fn every_engine_renders_finite_audio() {
     for engine in 0..24i32 {
-        let mut voice = Voice::default();
+        let mut voice = Voice::new(BLOCK_SIZE);
         voice.init();
 
         let mut patch = base_patch(engine);
@@ -83,7 +83,7 @@ fn every_engine_renders_finite_audio() {
 
 #[test]
 fn engine_selection_is_stable_and_in_range() {
-    let mut voice = Voice::default();
+    let mut voice = Voice::new(BLOCK_SIZE);
     voice.init();
     for engine in 0..24i32 {
         let patch = base_patch(engine);
