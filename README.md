@@ -15,7 +15,7 @@ modules](https://github.com/pichenettes/eurorack) to `no_std` library crates.
 
 `braids` is the worked example every fixed-point module port should follow;
 `plaits` is the worked example for a floating-point module (no bit-exactness
-contract — see its own `PORTING.md`). See [`PORTING.md`](PORTING.md) for the
+contract). See [`PORTING.md`](PORTING.md) for the
 method, the fidelity contract, and the verification workflow.
 
 ## Layout
