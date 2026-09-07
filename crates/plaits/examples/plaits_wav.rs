@@ -39,74 +39,10 @@ const ENGINES: &[&str] = &[
 ];
 
 fn name_to_engine(name: &str) -> i32 {
-    if name == ENGINES[1] {
-        return 1;
-    }
-    if name == ENGINES[2] {
-        return 2;
-    }
-    if name == ENGINES[3] {
-        return 3;
-    }
-    if name == ENGINES[4] {
-        return 4;
-    }
-    if name == ENGINES[5] {
-        return 5;
-    }
-    if name == ENGINES[6] {
-        return 6;
-    }
-    if name == ENGINES[7] {
-        return 7;
-    }
-    if name == ENGINES[8] {
-        return 8;
-    }
-    if name == ENGINES[9] {
-        return 9;
-    }
-    if name == ENGINES[10] {
-        return 10;
-    }
-    if name == ENGINES[11] {
-        return 11;
-    }
-    if name == ENGINES[12] {
-        return 12;
-    }
-    if name == ENGINES[13] {
-        return 13;
-    }
-    if name == ENGINES[14] {
-        return 14;
-    }
-    if name == ENGINES[15] {
-        return 15;
-    }
-    if name == ENGINES[16] {
-        return 16;
-    }
-    if name == ENGINES[17] {
-        return 17;
-    }
-    if name == ENGINES[18] {
-        return 18;
-    }
-    if name == ENGINES[19] {
-        return 19;
-    }
-    if name == ENGINES[20] {
-        return 20;
-    }
-    if name == ENGINES[21] {
-        return 21;
-    }
-    if name == ENGINES[22] {
-        return 22;
-    }
-    if name == ENGINES[23] {
-        return 23;
+    for i in 0..ENGINES.len() {
+        if name == ENGINES[i] {
+            return i as i32;
+        }
     }
     return 0;
 }
