@@ -7,16 +7,18 @@
 //!
 //! # Deviations from the C
 //!
-//! - `LoadUserData` always receives `None`: nothing in this workspace wires
-//!   flash storage into the voice, so the `UserData::ptr(engine_index)` /
-//!   `fm_patches_table[]` fallback lookups in the C's `Render` are dropped.
-//!   This only matters for [`crate::engines::SixOpEngine`] (stub) and the
-//!   wavetable/wave-terrain engines' optional user tables, which are
-//!   likewise always `None` here.
-//! - Engine slots 2-4 (`SixOpEngine`, registered 3 times in the C against a
-//!   single shared instance, differentiated only by which FM patch bank
-//!   `LoadUserData` gave it) collapse to the same stub with no behavioral
-//!   difference between the three slots -- see the deviation above.
+//! - The C's `UserData::ptr(engine_index)` (a flash-uploaded patch/wavetable)
+//!   is dropped -- nothing in this workspace wires flash storage into the
+//!   voice, so `LoadUserData` never receives *uploaded* user data here.
+//!   The C falls back to its bundled `fm_patches_table[]` for engine slots
+//!   2-4 (`SixOpEngine`) when no flash upload is present, which this port
+//!   reproduces directly: slots 2/3/4 each load one of the three bundled
+//!   `SYX_BANK_{0,1,2}` FM patch banks into the single shared
+//!   [`crate::engines::SixOpEngine`] instance (matching the C's
+//!   `RegisterInstance(&six_op_engine_, ...)` called three times against one
+//!   object). The wavetable/wave-terrain engines' optional *user* tables
+//!   have no such bundled fallback in the C and so stay `None`/built-in here
+//!   too.
 
 use stmlib::units::semitones_to_ratio;
 use stmlib::{DelayLine, HysteresisQuantizer2, Limiter};
@@ -445,10 +447,12 @@ impl Voice<'_> {
                     self.six_op_engine
                         .load_syx_bank(&crate::resources::SYX_BANK_2);
                 }
-                5 => {
-                    self.wave_terrain_engine
-                        .load_user_data(Some(&crate::resources::SYX_BANK_0));
-                }
+                // Engine 5 (WaveTerrainEngine) intentionally gets no case here:
+                // its `user_terrain` stays `None` (no user-uploaded terrain --
+                // see its own module doc), which is what selects the 8
+                // built-in terrains. A prior version of this match mistakenly
+                // fed it `SYX_BANK_0` (the six-op FM patch bank) as if it were
+                // an 8-bit terrain height-map.
                 13 => {
                     self.wavetable_engine
                         .set_wavetables(&crate::resources::WAV_INTEGRATED_WAVES);

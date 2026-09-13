@@ -11,6 +11,23 @@ authors.workspace = true
 name = "plaits"
 path = "src/lib.rs"
 
+[features]
+# `SixOpEngine` renders its 2 voices in full every block by default -- see
+# that engine's module doc for why. This enables the original firmware's
+# alternative: only one voice gets a (2-block-long) full render per call,
+# alternating. The per-sample operator/sine work is identical either way
+# (same total work, just attributed to one voice instead of two); what
+# this actually saves is paying each voice's per-*call* envelope/keyboard-
+# /velocity-scaling setup only every other call instead of every call --
+# a fixed cost per call per voice, independent of block size. That means
+# its benefit *shrinks* as block size grows (the fixed cost is a smaller
+# fraction of an already-bigger per-call total either way), while the
+# pipeline latency it introduces (up to ~2 blocks for whichever voice
+# isn't rendering this call) grows in absolute time. Small blocks (closer
+# to the original firmware's 12 samples) are where this earns its keep;
+# don't reach for it at a large block size without measuring first.
+six-op-staggered-rendering = []
+
 [dependencies]
 mi-stmlib.workspace = true
 libm = "0.2"

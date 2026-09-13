@@ -12,8 +12,8 @@
 //! on a Cortex-M, which doesn't apply to a portable library), `Option`/slices
 //! instead of nullable pointers.
 //!
-//! 22 of the 24 engine models are ported; `SixOpEngine` and `SpeechEngine`
-//! are documented silent stubs. See `PORTING.md` for the full status.
+//! 23 of the 24 engine models are ported; `SpeechEngine` is a documented
+//! silent stub. See `PORTING.md` for the full status.
 #![no_std]
 #![allow(
     clippy::too_many_arguments,
