@@ -14,7 +14,9 @@ modules](https://github.com/pichenettes/eurorack) to `no_std` library crates.
 | `mi-elements`    | Elements modal / physical-modelling voice    | **ported**, floating-point (no bit-exactness contract); MODAL / STRING / STRINGS + the "Ominous" easter-egg voice + diffuser & reverb; smoke-tested |
 | `mi-edges`       | Edges quad chiptune oscillator (AVR)         | **ported**, fixed-point; the sampled `DigitalOscillator` (6 shapes) + `TimerOscillator` (square-wave timer maths + a software square renderer); smoke-tested (no C harness — firmware is AVR-asm-only) |
 | `mi-rings`       | Rings modal / sympathetic-string resonator   | **ported**, floating-point (no bit-exactness contract); all 6 resonator models + `Strummer` + the "Disastrous Peace" string-synth easter egg (formant / chorus / ensemble / reverb); smoke-tested |
-| `mi-branches` … `mi-yarns` (11 more) | one crate per remaining module | **scaffold** — `Cargo.toml` + `lib.rs` + a per-crate `PORTING.md` source inventory |
+| `mi-tides`       | Tides tidal modulator (2014, fixed-point)    | **ported**; `Generator` verified **bit-identical** to the C firmware DSP over an 18-way {range x mode x sync} sweep |
+| `mi-tides2`      | Tides2 tidal modulator (2018, floating-point)| **ported**; `PolySlopeGenerator`/`RampGenerator`/`RampExtractor` — a 24-way sweep comes out bit-identical to the C on this toolchain (no bit-exactness *contract*, see its `PORTING.md`) |
+| `mi-branches` … `mi-yarns` (9 more) | one crate per remaining module | **scaffold** — `Cargo.toml` + `lib.rs` + a per-crate `PORTING.md` source inventory |
 
 `braids` is the worked example every fixed-point module port should follow;
 `plaits` is the worked example for a floating-point module (no bit-exactness
@@ -38,19 +40,25 @@ crates/
                                    phase_vocoder), grain, window, correlator, fx
                                    (diffuser, reverb, pitch_shifter), audio_buffer,
                                    mu_law, resources (transpiled tables)
+  tides/             mi-tides    — generator (fixed-point), resources
+  tides2/            mi-tides2   — ramp_generator, ramp_shaper, ramp_extractor,
+                                   poly_slope_generator (floating-point), resources
   <module>/          mi-<module> — scaffold + PORTING.md
 tools/
   transpile_resources.py   C `resources.cc` -> Rust `static` arrays
   braids_compare.cc        reference renderer (links the C firmware DSP)
   clouds_compare.cc        same, for clouds
-  wav_diff.py              diff two trees of raw-PCM / WAV dumps
+  tides_compare.cc         reference renderer for mi-tides (fixed-point)
+  tides2_compare.cc        reference renderer for mi-tides2 (floating-point)
+  wav_diff.py              diff two trees of raw-PCM / WAV dumps (bit-exact)
+  f32_diff.py              diff two trees of raw-float32 dumps (numeric tolerance)
 ```
 
 ## Build & test
 
 ```
 cargo build --workspace
-cargo test  --workspace          # Braids + Clouds equivalence goldens, Plaits/Clouds smoke tests
+cargo test  --workspace          # Braids/Tides/Tides2 equivalence goldens, Plaits/Clouds/... smoke tests
 cargo clippy --workspace
 
 # render 5 s of one Braids model to a WAV
@@ -108,6 +116,33 @@ python3 tools/wav_diff.py /tmp/c_pcm /tmp/rust_pcm
 Spectral render; 2 more differ by 1 LSB on ≤ 2 of 96000 samples, and the last
 (mono Stretch) diverges into a different but valid WSOLA splice near the end of
 the run — see [`crates/clouds/PORTING.md`](crates/clouds/PORTING.md).
+
+## Verifying `tides` / `tides2` against the C
+
+```
+cd ../eurorack
+g++ -O2 -DTEST -I. -Istmlib -o /tmp/tides_compare \
+    ../eurorack-rs/tools/tides_compare.cc \
+    tides/generator.cc tides/resources.cc
+mkdir -p /tmp/c_pcm && /tmp/tides_compare /tmp/c_pcm
+cd ../eurorack-rs
+cargo run --release --example compare -p mi-tides -- /tmp/rust_pcm
+python3 tools/wav_diff.py /tmp/c_pcm /tmp/rust_pcm     # bit-exact
+
+cd ../eurorack
+g++ -O2 -DTEST -I. -Istmlib -o /tmp/tides2_compare \
+    ../eurorack-rs/tools/tides2_compare.cc \
+    tides2/poly_slope_generator.cc tides2/resources.cc tides2/ramp/ramp_extractor.cc
+mkdir -p /tmp/c_f32 && /tmp/tides2_compare /tmp/c_f32
+cd ../eurorack-rs
+cargo run --release --example compare -p mi-tides2 -- /tmp/rust_f32
+python3 tools/f32_diff.py /tmp/c_f32 /tmp/rust_f32     # numeric tolerance
+```
+
+`mi-tides`'s 18-way sweep is bit-identical (a hard contract, like Braids).
+`mi-tides2`'s 24-way sweep also comes out bit-identical on this toolchain, but
+that isn't a contract for a floating-point port — see
+[`crates/tides2/PORTING.md`](crates/tides2/PORTING.md).
 
 ## License
 

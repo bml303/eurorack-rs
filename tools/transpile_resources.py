@@ -43,7 +43,8 @@ def parse_arrays(cc_text: str):
     # const uint8_t* const some_table[] = { ... };   (star and/or trailing const optional)
     decl = re.compile(
         r"(?:static\s+)?const\s+(u?int(?:8|16|32)_t|float|char)\s*(\*?)\s*"
-        r"(?:const\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*\[\]\s*=\s*\{(.*?)\}\s*;",
+        r"(?:const\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*\[\]\s*"
+        r"(?:[A-Za-z_][A-Za-z0-9_]*\s*)?=\s*\{(.*?)\}\s*;",
         re.S,
     )
     for m in decl.finditer(cc_text):

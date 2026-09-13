@@ -117,6 +117,14 @@ pub fn crossfade_u8(table_a: &[u8], table_b: &[u8], phase: u32, balance: u16) ->
     a.wrapping_add((b - a).wrapping_mul(balance as i32) >> 16) as i16
 }
 
+/// `Crossfade115(const int16_t* a, const int16_t* b, uint16_t phase, uint16_t balance)`.
+#[inline]
+pub fn crossfade_115(table_a: &[i16], table_b: &[i16], phase: u16, balance: u16) -> i16 {
+    let a = interpolate_115(table_a, phase) as i32;
+    let b = interpolate_115(table_b, phase) as i32;
+    a.wrapping_add((b - a).wrapping_mul(balance as i32) >> 16) as i16
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
