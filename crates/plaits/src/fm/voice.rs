@@ -1,6 +1,17 @@
-// -- DX7 voice
-
-use core::cell::RefCell;
+//! `plaits/dsp/fm/voice.h` -- one DX7 voice: `NUM_OPERATORS` [`Operator`]s
+//! wired together by a [`Patch`]'s algorithm, each with its own envelope and
+//! frequency ratio, plus the shared pitch envelope and feedback state.
+//!
+//! Unlike the C's `Voice<num_operators>`, which stores a `const
+//! Algorithms<num_operators>*` set once via [`Voice::init`], this `Voice`
+//! takes the (single, shared) compiled [`Algorithms`] table as a parameter to
+//! [`Voice::render`] instead -- it's only ever needed there (to look up each
+//! operator group's [`RenderCall`](super::algorithms::RenderCall) and, for
+//! the brightness modulation, [`Algorithms::is_modulator`]), so there's
+//! nothing to gain from every voice owning (or, worse, cloning) a copy of it.
+//! The owner ([`super::super::engines::six_op_engine::SixOpEngine`], which
+//! has `NUM_SIX_OP_VOICES` of these) computes the table once in its own
+//! `init` and passes a reference into each voice's `render` call.
 
 use super::algorithms::Algorithms;
 use super::dx_units::{
@@ -8,12 +19,15 @@ use super::dx_units::{
     pow_2_fast, rate_scaling,
 };
 use super::envelope::{OperatorEnvelope, PitchEnvelope};
-use super::operator::Operator;
+use super::operator::{Buffer, Operator};
 use super::patch::Patch;
 use crate::utils::units::semitones_to_ratio_safe;
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Copy)]
 pub struct VoiceParameters {
+    /// Freezes the envelopes and evaluates them at [`VoiceParameters::
+    /// envelope_control`]'s position along a fixed-length gate instead of
+    /// live-gating them -- Plaits' "envelope scrubbing".
     pub sustain: bool,
     pub gate: bool,
     pub note: f32,
@@ -30,9 +44,8 @@ impl VoiceParameters {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct Voice<const NUM_OPERATORS: usize, const NUM_ALGORITHMS: usize> {
-    algorithms: Option<Algorithms<NUM_OPERATORS, NUM_ALGORITHMS>>,
+#[derive(Debug)]
+pub struct Voice<const NUM_OPERATORS: usize> {
     sample_rate: f32,
     one_hz: f32,
     a0: f32,
@@ -42,267 +55,236 @@ pub struct Voice<const NUM_OPERATORS: usize, const NUM_ALGORITHMS: usize> {
     operator: [Operator; NUM_OPERATORS],
     operator_envelope: [OperatorEnvelope; NUM_OPERATORS],
     pitch_envelope: PitchEnvelope,
+    feedback_state: [f32; 2],
 
     normalized_velocity: f32,
     note: f32,
 
-    ratios: [f32; NUM_OPERATORS],
+    /// Per-operator frequency ratio, or (encoded as its *sign*) an absolute
+    /// 1Hz-based frequency for a fixed-frequency operator -- see
+    /// [`dx_units::frequency_ratio`](super::dx_units::frequency_ratio).
+    ratio: [f32; NUM_OPERATORS],
     level_headroom: [f32; NUM_OPERATORS],
     level: [f32; NUM_OPERATORS],
 
-    feedback_state: [f32; 2],
-
     patch: Option<Patch>,
-
+    /// Sticky "needs [`Voice::setup`]" bit, set by [`Voice::set_patch`] and
+    /// cleared once `setup` has recomputed the envelope/ratio caches below.
     dirty: bool,
 }
 
-impl<const NUM_OPERATORS: usize, const NUM_ALGORITHMS: usize> Default
-    for Voice<NUM_OPERATORS, NUM_ALGORITHMS>
-{
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl<const NUM_OPERATORS: usize, const NUM_ALGORITHMS: usize> Voice<NUM_OPERATORS, NUM_ALGORITHMS> {
+impl<const NUM_OPERATORS: usize> Voice<NUM_OPERATORS> {
     pub fn new() -> Self {
         Self {
-            algorithms: None,
             sample_rate: 0.0,
             one_hz: 0.0,
             a0: 0.0,
-
             gate: false,
-
-            operator: core::array::from_fn(|_| Operator::new()),
+            operator: [Operator::default(); NUM_OPERATORS],
             operator_envelope: core::array::from_fn(|_| OperatorEnvelope::new()),
             pitch_envelope: PitchEnvelope::new(),
-
-            normalized_velocity: 0.0,
-            note: 0.0,
-
-            ratios: [0.0; NUM_OPERATORS],
+            feedback_state: [0.0; 2],
+            normalized_velocity: 10.0,
+            note: 48.0,
+            ratio: [0.0; NUM_OPERATORS],
             level_headroom: [0.0; NUM_OPERATORS],
             level: [0.0; NUM_OPERATORS],
-
-            feedback_state: [0.0; 2],
-
             patch: None,
-
-            dirty: false,
+            dirty: true,
         }
     }
 
-    #[inline]
-    pub fn init(
-        &mut self,
-        algorithms: &Algorithms<NUM_OPERATORS, NUM_ALGORITHMS>,
-        sample_rate: f32,
-    ) {
-        self.algorithms = Some(algorithms.clone());
-
+    pub fn init(&mut self, sample_rate: f32) {
         self.sample_rate = sample_rate;
         self.one_hz = 1.0 / sample_rate;
         self.a0 = 55.0 / sample_rate;
 
-        let native_sr = 44100.0; // Legacy sample rate.
-        let envelope_scale = native_sr * self.one_hz;
-
-        for (operator, operator_envelope) in self
-            .operator
-            .iter_mut()
-            .zip(self.operator_envelope.iter_mut())
-        {
+        // The envelope/LFO rate tables below were tuned against the DX7's
+        // 44.1kHz sample rate; scale so they land on the same real-time rate
+        // at whatever rate this port actually runs at.
+        let envelope_scale = 44_100.0 * self.one_hz;
+        for operator in &mut self.operator {
             operator.reset();
-            operator_envelope.0.init(envelope_scale);
         }
+        for envelope in &mut self.operator_envelope {
+            envelope.init(envelope_scale);
+        }
+        self.pitch_envelope.init(envelope_scale);
 
-        self.pitch_envelope.0.init(envelope_scale);
-
-        self.feedback_state[0] = 0.0;
-        self.feedback_state[1] = 0.0;
-
+        self.feedback_state = [0.0; 2];
         self.patch = None;
         self.gate = false;
         self.note = 48.0;
         self.normalized_velocity = 10.0;
-
         self.dirty = true;
     }
 
-    #[inline]
     pub fn set_patch(&mut self, patch: Option<Patch>) {
         self.patch = patch;
         self.dirty = true;
     }
 
-    /// Returns the current patch.
     pub fn patch(&self) -> Option<&Patch> {
         self.patch.as_ref()
     }
 
-    /// Pre-compute everything that can be pre-computed once a patch is loaded:
-    /// - envelope constants
-    /// - frequency ratios
-    #[inline]
-    pub fn setup(&mut self) -> bool {
+    pub fn op_level(&self, i: usize) -> f32 {
+        self.level[i]
+    }
+
+    /// Recomputes the envelope constants and frequency ratios [`Voice::
+    /// render`] needs from the current patch, if [`Voice::set_patch`] has
+    /// been called since the last time this ran. Returns whether it *did*
+    /// anything -- see the CPU-overrun note at its `render` call site.
+    fn setup(&mut self) -> bool {
         if !self.dirty {
             return false;
         }
+        let Some(patch) = self.patch.as_ref() else {
+            return false;
+        };
 
-        if let Some(ref patch) = self.patch {
-            self.pitch_envelope
-                .set(&patch.pitch_envelope.rate, &patch.pitch_envelope.level);
+        self.pitch_envelope
+            .set(&patch.pitch_envelope.rate, &patch.pitch_envelope.level);
 
-            for i in 0..NUM_OPERATORS {
-                let op = &patch.op[i];
+        for i in 0..NUM_OPERATORS {
+            let op = &patch.op[i];
+            let level = operator_level(op.level);
+            self.operator_envelope[i].set(&op.envelope.rate, &op.envelope.level, level);
 
-                let level = operator_level(op.level);
-                self.operator_envelope[i].set(&op.envelope.rate, &op.envelope.level, level);
+            // The level increase from keyboard scaling plus velocity scaling
+            // must not push the operator above level 99 (TL 0) -- clamp the
+            // headroom left for it here, applied in `render` below.
+            self.level_headroom[i] = (127 - level) as f32;
 
-                // The level increase caused by keyboard scaling plus velocity
-                // scaling should not exceed this number - otherwise it would be
-                // equivalent to have an operator with a level above 99.
-                self.level_headroom[i] = (127 - level) as f32;
-
-                // Pre-compute frequency ratios. Encode the base frequency
-                // (1Hz or the root note) as the sign of the ratio.
-                let sign = if op.mode == 0 { 1.0 } else { -1.0 };
-                self.ratios[i] = sign * frequency_ratio(op);
-            }
-
-            self.dirty = false;
+            // A fixed-frequency operator's ratio is a 1Hz-relative multiplier
+            // rather than a note-relative one; encode that as the ratio's
+            // sign (see `f[i]`'s computation in `render`) so both cases share
+            // one array instead of a parallel `is_fixed_frequency[]`.
+            let sign = if op.mode == 0 { 1.0 } else { -1.0 };
+            self.ratio[i] = sign * frequency_ratio(op);
         }
 
+        self.dirty = false;
         true
     }
 
-    #[inline]
-    pub fn op_level(&self, i: u32) -> f32 {
-        self.level[i as usize]
-    }
-
-    #[inline]
-    pub fn render(&mut self, parameters: &VoiceParameters, buffers: &[RefCell<&mut [f32]>; 4]) {
+    /// Renders one block, phase-modulating operators per `algorithm`
+    /// (looked up once per contiguous chain via `algorithms`, shared across
+    /// every voice using the same operator count -- see the module doc).
+    /// `buffers[0]` determines the block size; every buffer must be at
+    /// least that long. See [`super::operator::Buffer`] for why a buffer can
+    /// legitimately be aliased between two slots.
+    pub fn render<const NUM_ALGORITHMS: usize>(
+        &mut self,
+        algorithms: &Algorithms<NUM_OPERATORS, NUM_ALGORITHMS>,
+        parameters: &VoiceParameters,
+        buffers: &[Buffer; 4],
+    ) {
         if self.setup() {
-            // This prevents a CPU overrun, since there is not enough CPU to perform
-            // both a patch setup and a full render in the time allotted for
-            // a render. As a drawback, this causes a 0.5ms blank before a new
-            // patch starts playing. But this is a clean blank, as opposed to a
-            // glitchy overrun.
+            // A patch just became dirty; skip rendering this block rather
+            // than pay for both a setup and a full render in the time this
+            // block's real-time deadline allows. A clean 0.5ms blank when
+            // switching patches, rather than a glitchy overrun.
             return;
         }
+        let Some(patch) = self.patch.as_ref() else {
+            return;
+        };
 
-        let envelope_rate = buffers[0].borrow().len() as f32;
-        let ad_scale = pow_2_fast((0.5 - parameters.envelope_control) * 8.0, 1);
-        let r_scale = pow_2_fast(-f32::abs(parameters.envelope_control - 0.3) * 8.0, 1);
+        let size = buffers[0].borrow().len();
+        let envelope_rate = size as f32;
+        let ad_scale = pow_2_fast::<1>((0.5 - parameters.envelope_control) * 8.0);
+        let r_scale = pow_2_fast::<1>(-f32::abs(parameters.envelope_control - 0.3) * 8.0);
         let gate_duration = 1.5 * self.sample_rate;
         let envelope_sample = gate_duration * parameters.envelope_control;
 
-        // Apply LFO and pitch envelope modulations.
+        // Apply the LFO and pitch-envelope modulations.
         let pitch_envelope = if parameters.sustain {
-            self.pitch_envelope
-                .0
-                .render_at_sample(envelope_sample, gate_duration)
+            self.pitch_envelope.render_at_sample(envelope_sample, gate_duration)
         } else {
-            self.pitch_envelope
-                .0
-                .render(parameters.gate, envelope_rate, ad_scale, r_scale)
+            self.pitch_envelope.render(parameters.gate, envelope_rate, ad_scale, r_scale)
         };
         let pitch_mod = pitch_envelope + parameters.pitch_mod;
         let f0 = self.a0 * 0.25 * semitones_to_ratio_safe(parameters.note - 9.0 + pitch_mod * 12.0);
 
-        // Sample the note and velocity (used for scaling) only when a trigger
-        // is received, or constantly when we are in free-running mode.
+        // Sample the note and velocity (which affect scaling, not just pitch)
+        // only on a fresh trigger, or continuously in free-running (sustain)
+        // mode.
         let note_on = parameters.gate && !self.gate;
         self.gate = parameters.gate;
-
         if note_on || parameters.sustain {
             self.normalized_velocity = normalize_velocity(parameters.velocity);
             self.note = parameters.note;
         }
 
-        if let Some(ref patch) = self.patch {
-            // Reset operator phase if a note on is detected & if the patch requires it.
-            if note_on && patch.reset_phase != 0 {
-                for i in 0..NUM_OPERATORS {
-                    self.operator[i].phase = 0;
-                }
-            }
-
-            // Compute frequencies and amplitudes.
-            let mut f = [0.0; NUM_OPERATORS];
-            let mut a = [0.0; NUM_OPERATORS];
-
-            for i in 0..NUM_OPERATORS {
-                let op = &patch.op[i];
-
-                f[i] = self.ratios[i]
-                    * (if self.ratios[i] < 0.0 {
-                        -self.one_hz
-                    } else {
-                        f0
-                    });
-
-                let rate_scaling = rate_scaling(self.note, op.rate_scaling);
-                let mut level = if parameters.sustain {
-                    self.operator_envelope[i]
-                        .0
-                        .render_at_sample(envelope_sample, gate_duration)
-                } else {
-                    self.operator_envelope[i].0.render(
-                        parameters.gate,
-                        envelope_rate * rate_scaling,
-                        ad_scale,
-                        r_scale,
-                    )
-                };
-                let kb_scaling = keyboard_scaling(self.note, &op.keyboard_scaling);
-                let velocity_scaling = self.normalized_velocity * op.velocity_sensitivity as f32;
-                let brightness = if let Some(algorithms) = &self.algorithms
-                    && algorithms.is_modulator(patch.algorithm as u32, i as u32)
-                {
-                    (parameters.brightness - 0.5) * 32.0
-                } else {
-                    0.0
-                };
-
-                level += 0.125
-                    * f32::min(
-                        kb_scaling + velocity_scaling + brightness,
-                        self.level_headroom[i],
-                    );
-
-                self.level[i] = level;
-
-                let sensitivity = amp_mod_sensitivity(op.amp_mod_sensitivity);
-                let log_level_mod = sensitivity * parameters.amp_mod - 1.0;
-                let level_mod = 1.0 - pow_2_fast(6.4 * log_level_mod, 2);
-                a[i] = pow_2_fast(-14.0 + level * level_mod, 2);
-            }
-
-            let mut i = 0;
-
-            while i < NUM_OPERATORS {
-                if let Some(algorithms) = &self.algorithms {
-                    let call = algorithms.render_call(patch.algorithm as u32, i as u32);
-                    if let Some(render_fn) = call.render_fn {
-                        render_fn(
-                            &mut self.operator[i..],
-                            &f[i..],
-                            &a[i..],
-                            &mut self.feedback_state,
-                            patch.feedback as i32,
-                            &buffers[call.input_index as usize],
-                            &buffers[call.output_index as usize],
-                        );
-                    }
-                    i += call.n as usize;
-                } else {
-                    i += 1;
-                }
+        if note_on && patch.reset_phase {
+            for operator in &mut self.operator {
+                operator.phase = 0;
             }
         }
+
+        let mut f = [0.0f32; NUM_OPERATORS];
+        let mut a = [0.0f32; NUM_OPERATORS];
+        for i in 0..NUM_OPERATORS {
+            let op = &patch.op[i];
+
+            f[i] = self.ratio[i] * if self.ratio[i] < 0.0 { -self.one_hz } else { f0 };
+
+            let rate_scale = rate_scaling(self.note, op.rate_scaling);
+            let mut level = if parameters.sustain {
+                self.operator_envelope[i].render_at_sample(envelope_sample, gate_duration)
+            } else {
+                self.operator_envelope[i].render(
+                    parameters.gate,
+                    envelope_rate * rate_scale,
+                    ad_scale,
+                    r_scale,
+                )
+            };
+            let kb_scaling = keyboard_scaling(self.note, &op.keyboard_scaling);
+            let velocity_scaling = self.normalized_velocity * op.velocity_sensitivity as f32;
+            let brightness = if algorithms.is_modulator(patch.algorithm, i) {
+                (parameters.brightness - 0.5) * 32.0
+            } else {
+                0.0
+            };
+            level += 0.125 * (kb_scaling + velocity_scaling + brightness).min(self.level_headroom[i]);
+            self.level[i] = level;
+
+            let sensitivity = amp_mod_sensitivity(op.amp_mod_sensitivity);
+            let log_level_mod = sensitivity * parameters.amp_mod - 1.0;
+            let level_mod = 1.0 - pow_2_fast::<2>(6.4 * log_level_mod);
+            a[i] = pow_2_fast::<2>(-14.0 + level * level_mod);
+        }
+
+        let mut i = 0;
+        while i < NUM_OPERATORS {
+            let call = algorithms.render_call(patch.algorithm, i);
+            let Some(render_fn) = call.render_fn else {
+                // Every operator position gets a `RenderCall` at `compile`
+                // time; a missing one would mean the opcode tables or the
+                // compiler have a bug, not a legitimate "nothing to render"
+                // case -- see the `debug_assert` in `Algorithms::compile`.
+                debug_assert!(false, "operator {i} of algorithm {} has no render call", patch.algorithm);
+                break;
+            };
+            render_fn(
+                &mut self.operator[i..i + call.n],
+                &f[i..],
+                &a[i..],
+                &mut self.feedback_state,
+                patch.feedback,
+                &buffers[call.input_index],
+                &buffers[call.output_index],
+            );
+            i += call.n;
+        }
+    }
+}
+
+impl<const NUM_OPERATORS: usize> Default for Voice<NUM_OPERATORS> {
+    fn default() -> Self {
+        Self::new()
     }
 }

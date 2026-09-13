@@ -107,7 +107,15 @@ Verification: `cargo test -p mi-braids --test equivalence` (47/48 shapes;
 
 ## `mi-plaits` status
 
-Ported (24 engine models working) — floating point, so no bit-exactness contract applies.
+Ported (23 of 24 engine models working; `SpeechEngine` is a documented
+silent stub) — floating point, so no bit-exactness contract applies.
+`SixOpEngine` (the 6-operator DX7-style FM engine, slots 2-4) renders real
+audio via `crate::fm`; it defaults to rendering both voices in full every
+block rather than the C's CPU-optimised "staggered" alternate-voice
+rendering (see that engine's module doc for why), but the `six-op-
+staggered-rendering` Cargo feature restores the C's exact scheme for
+targets where it's worth it — see the feature's doc comment in
+`crates/plaits/Cargo.toml`.
 
 ## `mi-clouds` status
 
