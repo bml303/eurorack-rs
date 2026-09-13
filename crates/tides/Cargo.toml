@@ -1,6 +1,6 @@
 [package]
 name = "mi-tides"
-description = "Rust port of Mutable Instruments Tides (Tidal modulator (2014)). SCAFFOLD -- DSP not yet ported."
+description = "Rust port of Mutable Instruments Tides (Tidal modulator, 2014)."
 version.workspace = true
 edition.workspace = true
 license.workspace = true

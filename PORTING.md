@@ -220,3 +220,16 @@ bit-compare harness (float port; `rings_test.cc` needs external audio anyway).
 FX, a `Strummer` inhibit check, and an autocorrelation pitch check on STRING.
 Deviations (in-bounds `Interpolate` clamps, `as i64 as u32` FM phase cast,
 chord-index clamp) are in `crates/rings/PORTING.md`.
+
+## `mi-tides` status
+
+Ported and bit-verified (fixed-point, follows the `mi-braids` template) — see
+`crates/tides/PORTING.md`. `cargo test -p mi-tides --test equivalence` checks
+an 18-way {range x mode x sync} sweep, bit-identical to the C.
+
+## `mi-tides2` status
+
+Ported (floating point, follows the `mi-plaits` template — no bit-exactness
+*contract*) — see `crates/tides2/PORTING.md`. In practice `cargo test -p
+mi-tides2 --test equivalence` checks a 24-way {ramp mode x output mode x
+range} sweep and it comes out bit-identical to the C on this toolchain.
