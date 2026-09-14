@@ -32,6 +32,7 @@ pub mod parameter_interpolator;
 pub mod pattern_predictor;
 pub mod polyblep;
 pub mod random;
+pub mod ring_buffer;
 pub mod rsqrt;
 pub mod units;
 
@@ -49,6 +50,7 @@ pub use limiter::Limiter;
 pub use parameter_interpolator::ParameterInterpolator;
 pub use pattern_predictor::PatternPredictor;
 pub use random::Random;
+pub use ring_buffer::RingBuffer;
 
 /// `CLIP(x)` from `stmlib.h`: clamp to the 16-bit *signed* range, but using the
 /// asymmetric bound `[-32767, 32767]` that the original macro uses.

@@ -7,11 +7,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 A Rust workspace porting the DSP of Mutable Instruments' Eurorack firmware (the C
 repo at `../eurorack`) to `no_std` library crates — one crate per module plus
 `mi-stmlib` for the shared code. `mi-braids` (fixed-point, bit-verified),
-`mi-plaits`, `mi-clouds`, `mi-elements` and `mi-rings` (floating-point) plus
-`mi-edges` (fixed-point, AVR) are ported; the other 11 module crates are
-scaffolds (`Cargo.toml` + `lib.rs` + `PORTING.md` inventory). Read
-`PORTING.md` before porting anything — it has the fidelity contract and the
-verification workflow.
+`mi-plaits`, `mi-clouds`, `mi-elements`, `mi-rings`, `mi-tides`, `mi-tides2`
+and `mi-marbles` (floating-point) plus `mi-edges` (fixed-point, AVR) are
+ported; the other 8 module crates are scaffolds (`Cargo.toml` + `lib.rs` +
+`PORTING.md` inventory). Read `PORTING.md` before porting anything — it has
+the fidelity contract and the verification workflow.
 
 ## Commands
 
