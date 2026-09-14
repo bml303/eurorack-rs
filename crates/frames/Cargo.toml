@@ -1,6 +1,6 @@
 [package]
 name = "mi-frames"
-description = "Rust port of Mutable Instruments Frames (Keyframer / mixer). SCAFFOLD -- DSP not yet ported."
+description = "Rust port of Mutable Instruments Frames (Keyframer / mixer)."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
