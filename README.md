@@ -24,9 +24,9 @@ modules](https://github.com/pichenettes/eurorack) to `no_std` library crates.
 | `mi-frames`      | Frames keyframer / mixer                     | **ported**, fixed-point; `Keyframer` (up to 64 keyframes, 6 easing curves, linear/exponential VCA response) + `PolyLfo` (4-channel wavetable LFO easter egg); found & fixed 3 latent C++ out-of-bounds reads (see its `PORTING.md`); smoke-tested (no C harness) |
 | `mi-streams`     | Streams dual dynamics gate (VCA/VCF)         | **ported**, fixed-point; `Processor` dispatches 6 algorithms (`Envelope`, `Vactrol`, `Follower`, `Compressor`, `FilterController`, `LorenzGenerator`), several with 64-bit intermediate arithmetic matched verbatim; smoke-tested (no C harness) |
 | `mi-peaks`       | Peaks dual function generator                | **ported**, fixed-point; `Processors` dispatches 12 functions (multistage envelope, LFO/tap-LFO, 4 drum voices, 2 pulse processors, bouncing ball, mini sequencer, number station); smoke-tested (no C harness) |
-| `mi-stages` (1 more) | remaining module | **scaffold** — `Cargo.toml` + `lib.rs` + a `PORTING.md` source inventory |
+| `mi-stages`      | Stages segment generator                     | **ported**, floating-point (no bit-exactness contract); `SegmentGenerator` — envelope/LFO/PLL-oscillator/step-sequencer/S&H/portamento/delay, all one engine selected by configuration; found & clamped 2 latent C++ out-of-bounds table reads (see its `PORTING.md`); smoke-tested (no C harness) |
 
-`braids` is the worked example every fixed-point module port should follow;
+All 16 modules are now ported. `braids` is the worked example every fixed-point module port should follow;
 `plaits` is the worked example for a floating-point module (no bit-exactness
 contract). See [`PORTING.md`](PORTING.md) for the
 method, the fidelity contract, and the verification workflow.
@@ -78,7 +78,9 @@ crates/
                                    (multistage_envelope, lfo, bouncing_ball, mini_sequencer),
                                    pulse_processor (pulse_shaper, pulse_randomizer),
                                    number_station, gate_processor, calibration_data, resources
-  <module>/          mi-<module> — scaffold + PORTING.md
+  stages/            mi-stages   — segment_generator (SegmentGenerator, segment::{Type,
+                                   Configuration, Parameters}), variable_shape_oscillator,
+                                   oscillator, delay_line_16_bits, resources
 tools/
   transpile_resources.py   C `resources.cc` -> Rust `static` arrays
   braids_compare.cc        reference renderer (links the C firmware DSP)

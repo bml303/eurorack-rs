@@ -30,6 +30,7 @@ authors = ["Ported from Mutable Instruments code by Emilie Gillet"]
 
 [workspace.dependencies]
 mi-stmlib = { path = "crates/stmlib" }
+mi-tides2 = { path = "crates/tides2" }
 
 # Faithful fixed-point ports rely on C-style wrapping integer arithmetic.
 # Overflow checks would panic on perfectly legal wrap-around, so disable them
