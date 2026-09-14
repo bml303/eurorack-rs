@@ -23,6 +23,8 @@ modules](https://github.com/pichenettes/eurorack) to `no_std` library crates.
 | `mi-branches`    | Branches dual Bernoulli gate (AVR)           | **ported**, fixed-point; `Channel`/`Branches` — rising-edge probabilistic gate/toggle decision + the free-running 32-bit LFSR; switch-UI/EEPROM persistence out of scope (see its `PORTING.md`); smoke-tested (no C harness) |
 | `mi-streams`     | Streams dual dynamics gate (VCA/VCF)         | **ported**, fixed-point; `Processor` dispatches 6 algorithms (`Envelope`, `Vactrol`, `Follower`, `Compressor`, `FilterController`, `LorenzGenerator`), several with 64-bit intermediate arithmetic matched verbatim; smoke-tested (no C harness) |
 | `mi-frames`, `mi-peaks`, `mi-stages` (3 more) | one crate per remaining module | **scaffold** — `Cargo.toml` + `lib.rs` + a per-crate `PORTING.md` source inventory |
+| `mi-frames`      | Frames keyframer / mixer                     | **ported**, fixed-point; `Keyframer` (up to 64 keyframes, 6 easing curves, linear/exponential VCA response) + `PolyLfo` (4-channel wavetable LFO easter egg); found & fixed 3 latent C++ out-of-bounds reads (see its `PORTING.md`); smoke-tested (no C harness) |
+| `mi-peaks`, `mi-stages`, `mi-streams` (3 more) | one crate per remaining module | **scaffold** — `Cargo.toml` + `lib.rs` + a per-crate `PORTING.md` source inventory |
 
 `braids` is the worked example every fixed-point module port should follow;
 `plaits` is the worked example for a floating-point module (no bit-exactness
@@ -70,6 +72,7 @@ crates/
   streams/           mi-streams  — processor (Processor, 6 algorithms), envelope, vactrol,
                                    follower, compressor, lorenz_generator, filter_controller,
                                    svf, audio_cv_meter, meta_parameters, consts, resources
+  frames/            mi-frames   — keyframer (Keyframer), poly_lfo (PolyLfo), resources
   <module>/          mi-<module> — scaffold + PORTING.md
 tools/
   transpile_resources.py   C `resources.cc` -> Rust `static` arrays
