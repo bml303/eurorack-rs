@@ -1,13 +1,7 @@
-//! Stub for `plaits/dsp/engine/speech_engine.h` -- LPC-10/SAM-style word and
-//! sentence synthesis plus a "naive" formant-filtered vowel mode.
-//!
-//! **Not ported.** The real engine pulls in `plaits/dsp/speech/*` (~3000
-//! lines: an LPC decoder, word/phoneme banks, a SAM-derived reciter/naive
-//! synth path, and a dedicated `NaiveVocoder`/formant filter) -- the other
-//! large subsystem left out of this port, alongside
-//! [`super::six_op_engine::SixOpEngine`]. `render` outputs silence;
-//! `set_prosody_amount`/`set_speed` (called by `Voice` for engine slot 15)
-//! are no-ops.
+//! Port of `plaits/dsp/engine/speech_engine.h` -- LPC-10/SAM-style word and
+//! sentence synthesis plus a "naive" formant-filtered vowel mode. Pulls in
+//! `crate::speech::*`: an LPC decoder, word/phoneme banks, and a SAM-derived
+//! synth path.
 
 extern crate alloc;
 
@@ -124,7 +118,7 @@ impl Engine for SpeechEngine<'_> {
             }
 
             self.sam_speech_synth.render(
-                sustain,
+                trigger,
                 f0,
                 parameters.morph,
                 parameters.timbre,

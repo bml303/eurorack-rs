@@ -1,7 +1,7 @@
 // -- Naive speech synth - made from "synthesizer" building blocks (pulse
 // -- oscillator and zero-delay SVF).
 
-use crate::dsp::SAMPLE_RATE;
+use crate::dsp::{A0, SAMPLE_RATE};
 use crate::oscillator::oscillator::{Oscillator, OscillatorShape};
 use crate::utils::filter::{FilterMode, FrequencyApproximation, Svf};
 use crate::utils::units::semitones_to_ratio;
@@ -30,7 +30,7 @@ impl NaiveSpeechSynth {
 
     pub fn init(&mut self) {
         self.sample_rate_hz = SAMPLE_RATE;
-        self.a0_normalized = 27.5 / SAMPLE_RATE;
+        self.a0_normalized = A0;
 
         self.pulse.init();
         self.frequency = 0.0;
@@ -91,28 +91,16 @@ impl NaiveSpeechSynth {
             let p1r0 = PHONEMES[p_integral + 1][r_integral].formant[i];
             let p1r1 = PHONEMES[p_integral + 1][r_integral + 1].formant[i];
 
-            let p0r_f = (p0r0
-                .frequency
-                .wrapping_add(p0r1.frequency.wrapping_sub(p0r0.frequency)))
-                as f32
-                * r_fractional;
-            let p1r_f = (p1r0
-                .frequency
-                .wrapping_add(p1r1.frequency.wrapping_sub(p1r0.frequency)))
-                as f32
-                * r_fractional;
+            let p0r_f = p0r0.frequency as f32
+                + (p0r1.frequency as f32 - p0r0.frequency as f32) * r_fractional;
+            let p1r_f = p1r0.frequency as f32
+                + (p1r1.frequency as f32 - p1r0.frequency as f32) * r_fractional;
             let mut f = p0r_f + (p1r_f - p0r_f) * p_fractional;
 
-            let p0r_a = (p0r0
-                .amplitude
-                .wrapping_add(p0r1.amplitude.wrapping_sub(p0r0.amplitude)))
-                as f32
-                * r_fractional;
-            let p1r_a = (p1r0
-                .amplitude
-                .wrapping_add(p1r1.amplitude.wrapping_sub(p1r0.amplitude)))
-                as f32
-                * r_fractional;
+            let p0r_a = p0r0.amplitude as f32
+                + (p0r1.amplitude as f32 - p0r0.amplitude as f32) * r_fractional;
+            let p1r_a = p1r0.amplitude as f32
+                + (p1r1.amplitude as f32 - p1r0.amplitude as f32) * r_fractional;
             let a = (p0r_a + (p1r_a - p0r_a) * p_fractional) / 256.0;
 
             if f >= 160.0 {
