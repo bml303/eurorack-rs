@@ -21,10 +21,10 @@ modules](https://github.com/pichenettes/eurorack) to `no_std` library crates.
 | `mi-grids`       | Grids topographic drum sequencer (AVR)       | **ported**, fixed-point; `PatternGenerator` (25-map drum-density lookup + Euclidean-rhythm generator, both output modes) + `Clock` (tempo/swing phase accumulator); `LoadSettings`/`SaveSettings` (EEPROM) and the app-level main loop out of scope (see its `PORTING.md`); smoke-tested (no C harness) |
 | `mi-warps`       | Warps meta-modulator (cross-mod, vocoder)    | **ported**, floating-point (no bit-exactness contract); `Modulator` — 6 cross-modulation algorithms at x6 oversampling, a 20-band `Vocoder`/`FilterBank`, the frequency-shifter easter egg; smoke-tested (no C harness — the C test needs an external WAV file not in the repo) |
 | `mi-branches`    | Branches dual Bernoulli gate (AVR)           | **ported**, fixed-point; `Channel`/`Branches` — rising-edge probabilistic gate/toggle decision + the free-running 32-bit LFSR; switch-UI/EEPROM persistence out of scope (see its `PORTING.md`); smoke-tested (no C harness) |
-| `mi-streams`     | Streams dual dynamics gate (VCA/VCF)         | **ported**, fixed-point; `Processor` dispatches 6 algorithms (`Envelope`, `Vactrol`, `Follower`, `Compressor`, `FilterController`, `LorenzGenerator`), several with 64-bit intermediate arithmetic matched verbatim; smoke-tested (no C harness) |
-| `mi-frames`, `mi-peaks`, `mi-stages` (3 more) | one crate per remaining module | **scaffold** — `Cargo.toml` + `lib.rs` + a per-crate `PORTING.md` source inventory |
 | `mi-frames`      | Frames keyframer / mixer                     | **ported**, fixed-point; `Keyframer` (up to 64 keyframes, 6 easing curves, linear/exponential VCA response) + `PolyLfo` (4-channel wavetable LFO easter egg); found & fixed 3 latent C++ out-of-bounds reads (see its `PORTING.md`); smoke-tested (no C harness) |
-| `mi-peaks`, `mi-stages`, `mi-streams` (3 more) | one crate per remaining module | **scaffold** — `Cargo.toml` + `lib.rs` + a per-crate `PORTING.md` source inventory |
+| `mi-streams`     | Streams dual dynamics gate (VCA/VCF)         | **ported**, fixed-point; `Processor` dispatches 6 algorithms (`Envelope`, `Vactrol`, `Follower`, `Compressor`, `FilterController`, `LorenzGenerator`), several with 64-bit intermediate arithmetic matched verbatim; smoke-tested (no C harness) |
+| `mi-peaks`       | Peaks dual function generator                | **ported**, fixed-point; `Processors` dispatches 12 functions (multistage envelope, LFO/tap-LFO, 4 drum voices, 2 pulse processors, bouncing ball, mini sequencer, number station); smoke-tested (no C harness) |
+| `mi-stages` (1 more) | remaining module | **scaffold** — `Cargo.toml` + `lib.rs` + a `PORTING.md` source inventory |
 
 `braids` is the worked example every fixed-point module port should follow;
 `plaits` is the worked example for a floating-point module (no bit-exactness
@@ -73,6 +73,11 @@ crates/
                                    follower, compressor, lorenz_generator, filter_controller,
                                    svf, audio_cv_meter, meta_parameters, consts, resources
   frames/            mi-frames   — keyframer (Keyframer), poly_lfo (PolyLfo), resources
+  peaks/             mi-peaks    — processors (Processors, 12 functions), drums (bass/snare/
+                                   fm drum, high hat, svf, excitation), modulations
+                                   (multistage_envelope, lfo, bouncing_ball, mini_sequencer),
+                                   pulse_processor (pulse_shaper, pulse_randomizer),
+                                   number_station, gate_processor, calibration_data, resources
   <module>/          mi-<module> — scaffold + PORTING.md
 tools/
   transpile_resources.py   C `resources.cc` -> Rust `static` arrays
