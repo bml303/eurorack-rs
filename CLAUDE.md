@@ -8,11 +8,11 @@ A Rust workspace porting the DSP of Mutable Instruments' Eurorack firmware (the 
 repo at `../eurorack`) to `no_std` library crates — one crate per module plus
 `mi-stmlib` for the shared code. `mi-braids` (fixed-point, bit-verified),
 `mi-plaits`, `mi-clouds`, `mi-elements`, `mi-rings`, `mi-tides`, `mi-tides2`
-and `mi-marbles` (floating-point) plus `mi-edges` and `mi-yarns`
+and `mi-marbles` (floating-point) plus `mi-edges`, `mi-yarns` and `mi-grids`
 (fixed-point) are ported; `mi-yarns` is a MIDI sequencer/router rather than
 an audio voice engine, so its scope cuts are mostly "settings/ui/storage/
 SysEx-calibration are out" rather than missing DSP — see its `PORTING.md`
-for exactly what that means. The other 7 module crates are scaffolds
+for exactly what that means. The other 6 module crates are scaffolds
 (`Cargo.toml` + `lib.rs` + `PORTING.md` inventory). Read `PORTING.md`
 before porting anything — it has the fidelity contract and the
 verification workflow.
