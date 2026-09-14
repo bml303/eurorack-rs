@@ -13,6 +13,14 @@ impl GateFlags {
     pub const HIGH: GateFlags = GateFlags(1);
     pub const RISING: GateFlags = GateFlags(2);
     pub const FALLING: GateFlags = GateFlags(4);
+    /// `GATE_FLAG_FROM_BUTTON` -- set by `mi-peaks`' app layer to mark a
+    /// gate synthesized from a front-panel button rather than a jack; only
+    /// `Lfo`'s tap-tempo sync distinguishes it.
+    pub const FROM_BUTTON: GateFlags = GateFlags(8);
+    pub const AUXILIARY_LOW: GateFlags = GateFlags(0);
+    pub const AUXILIARY_HIGH: GateFlags = GateFlags(16);
+    pub const AUXILIARY_RISING: GateFlags = GateFlags(32);
+    pub const AUXILIARY_FALLING: GateFlags = GateFlags(64);
 
     #[inline]
     pub const fn bits(self) -> u8 {
