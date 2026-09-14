@@ -67,7 +67,7 @@ def to_rust_literal(token: str, rust_type: str) -> str:
             token = str(value)
         except Exception:
             pass
-    token = token.rstrip("Lu").rstrip("lL")
+    token = token.rstrip("LlUu")
     if rust_type == "f32":
         if "." not in token and "e" not in token and "E" not in token:
             token += ".0"
