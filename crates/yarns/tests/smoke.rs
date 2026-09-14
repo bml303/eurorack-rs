@@ -5,11 +5,12 @@
 //! without panicking, and `Voice`'s oscillator must produce a non-silent,
 //! bounded 16-bit-DAC-range signal.
 
+use stmlib::MidiStreamParser;
 use yarns::multi::Layout;
 use yarns::oscillator::audio_mode;
 use yarns::part::{ArpeggiatorDirection, VoiceAllocationMode, VoicingSettings};
 use yarns::voice::trigger_shape;
-use yarns::{JustIntonationProcessor, Multi, NullMidiOut, Voice};
+use yarns::{JustIntonationProcessor, MidiDispatch, Multi, NullMidiOut, Voice};
 
 fn audio_modes() -> [u8; 6] {
     [
@@ -306,5 +307,113 @@ fn built_in_song_plays_through_without_panicking() {
 
     let rms = (energy / count as f64).sqrt();
     assert!(rms > 0.0, "song playback produced only silence (rms = {rms})");
+}
+
+/// Records every `MidiOut` callback it receives, for assertions.
+#[derive(Default)]
+struct RecordingMidiOut {
+    note_ons: u32,
+    note_offs: u32,
+    clock_ticks: u32,
+    starts: u32,
+    stops: u32,
+}
+
+impl yarns::MidiOut for RecordingMidiOut {
+    fn note_on(&mut self, _channel: u8, _note: u8, _velocity: u8) {
+        self.note_ons += 1;
+    }
+    fn note_off(&mut self, _channel: u8, _note: u8) {
+        self.note_offs += 1;
+    }
+    fn internal_note_on(&mut self, _channel: u8, _note: u8, _velocity: u8) {
+        self.note_ons += 1;
+    }
+    fn internal_note_off(&mut self, _channel: u8, _note: u8) {
+        self.note_offs += 1;
+    }
+    fn clock_tick(&mut self) {
+        self.clock_ticks += 1;
+    }
+    fn start(&mut self) {
+        self.starts += 1;
+    }
+    fn stop(&mut self) {
+        self.stops += 1;
+    }
+}
+
+#[test]
+fn raw_midi_byte_stream_drives_a_voice_end_to_end() {
+    let mut multi = Multi::new();
+    multi.init(true);
+    multi.set_layout(Layout::Mono);
+    // Channel-1-omni MIDI out mode is the default from `init`, which means
+    // every note reaching the sole active part echoes through `MidiOut` --
+    // exercise that path too, not just the underlying `Multi` state.
+
+    let mut midi_out = RecordingMidiOut::default();
+    let mut parser = MidiStreamParser::new();
+
+    {
+        let mut dispatch = MidiDispatch::new(&mut multi, &mut midi_out);
+
+        // Note on channel 0, note 60, velocity 100.
+        for &b in &[0x90u8, 60, 100] {
+            parser.push_byte(&mut dispatch, b);
+        }
+    }
+
+    let mut cv = [0u16; 4];
+    let mut gate = [false; 4];
+    multi.get_cv_gate(&mut cv, &mut gate);
+    assert!(gate[0], "note-on byte sequence should gate voice 0 on");
+
+    // `Multi::internal_clock()` is true by default (`clock_tempo == 120 >=
+    // 40` from `init`), which makes `MidiDispatch::clock` deliberately
+    // ignore incoming MIDI clock bytes (matching the C++'s
+    // `MidiHandler::Clock()`'s `if (!multi.internal_clock())` guard
+    // exactly) -- switch to an external-clock tempo first so the
+    // interleaved clock byte below actually has an observable effect.
+    multi.set_tempo(30);
+
+    {
+        let mut dispatch = MidiDispatch::new(&mut multi, &mut midi_out);
+
+        // Running status: a clock byte (0xf8) interleaved mid-stream must
+        // not disturb the in-progress running status, then a second
+        // note-on (using running status, no repeated 0x90) followed by a
+        // running-status note-off-via-zero-velocity, then an explicit
+        // note off for the first note.
+        for &b in &[0xf8u8, 64, 90, 64, 0, 0x80, 60, 0] {
+            parser.push_byte(&mut dispatch, b);
+        }
+    }
+
+    multi.get_cv_gate(&mut cv, &mut gate);
+    assert!(!gate[0], "note-off byte sequence should gate voice 0 off");
+    assert!(midi_out.clock_ticks >= 1, "the interleaved clock byte should have reached MidiOut");
+    assert!(midi_out.note_ons >= 1, "at least one note-on should have echoed to MidiOut");
+    assert!(midi_out.note_offs >= 1, "at least one note-off should have echoed to MidiOut");
+}
+
+#[test]
+fn malformed_midi_byte_stream_does_not_panic() {
+    let mut multi = Multi::new();
+    multi.init(true);
+    let mut midi_out = NullMidiOut;
+    let mut parser = MidiStreamParser::new();
+    let mut dispatch = MidiDispatch::new(&mut multi, &mut midi_out);
+
+    // Stray data bytes with no preceding status byte, a lone SysEx
+    // terminator with no matching start, truncated multi-byte messages,
+    // and every realtime byte -- none of this should panic.
+    let bytes: [u8; 24] = [
+        0x00, 0x40, 0x7f, 0xf7, 0x90, 0xf7, 0xf8, 0xfa, 0xfb, 0xfc, 0xff, 0xb0, 0x01, 0xe0, 0x00,
+        0xc0, 0x90, 60, 0x80, 0xfe, 0xf0, 0x01, 0x02, 0xf7,
+    ];
+    for &b in &bytes {
+        parser.push_byte(&mut dispatch, b);
+    }
 }
 

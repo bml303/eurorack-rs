@@ -28,6 +28,7 @@ pub mod fixed;
 pub mod gate_flags;
 pub mod hysteresis_quantizer;
 pub mod limiter;
+pub mod midi;
 pub mod note_stack;
 pub mod parameter_interpolator;
 pub mod pattern_predictor;
@@ -49,6 +50,7 @@ pub use fixed::{
 };
 pub use hysteresis_quantizer::{HysteresisQuantizer, HysteresisQuantizer2};
 pub use limiter::Limiter;
+pub use midi::{MidiEventHandler, MidiStreamParser};
 pub use note_stack::{NoteEntry, NoteStack, NoteStackPriority};
 pub use parameter_interpolator::ParameterInterpolator;
 pub use pattern_predictor::PatternPredictor;

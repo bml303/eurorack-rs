@@ -2,12 +2,12 @@
 
 **Monophonic / polyphonic MIDI interface**  |  MCU family: `stm32f2`  |  ~10417 lines of hand-written C (excl. resources & drivers)
 
-## Status: ported (except MIDI byte-stream parsing, and everything out of scope)
+## Status: ported (except everything out of scope)
 
 Yarns is structurally different from every other crate in this workspace:
 it's a MIDI sequencer/router, not an audio voice engine, and a good chunk of
 its source is persisted settings and the front-panel UI -- not audio-rate
-DSP. Ported across two increments:
+DSP. Ported across three increments:
 
 - `voice.{cc,h}` -> `src/voice.rs` + `src/oscillator.rs` (`Voice`,
   `Oscillator`) -- pitch with portamento, pitch-bend, vibrato and a
@@ -33,28 +33,40 @@ DSP. Ported across two increments:
   increment) is pure numeric data, one byte per line -- trivial to
   transpile once actually opened. `Multi::clock_song`, the ~20 lines of
   *logic* that walks it, is ported in `multi.rs`.
+- `stmlib/midi/midi.h`'s `MidiStreamParser<Handler>` -> `mi-stmlib`'s
+  `src/midi.rs` (`MidiStreamParser`, `MidiEventHandler`) -- this is shared
+  library code, not Yarns-specific in the C++ (it lives in `stmlib/`, not
+  `yarns/`), so it's ported into `mi-stmlib` rather than this crate: a
+  from-scratch MIDI byte-stream decoder (running status, realtime messages
+  interleaved with data bytes, SysEx framing).
+- `midi_handler.{cc,h}`'s dispatch functions (`MidiHandler::NoteOn`/
+  `ControlChange`/`PitchBend`/etc., which forward into `Multi` and
+  optionally echo to a MIDI-out buffer) -> `src/midi_dispatch.rs`
+  (`MidiDispatch`), implementing `stmlib::MidiEventHandler` on top of
+  `Multi` + `&mut dyn MidiOut`. Pairing `MidiStreamParser` with
+  `MidiDispatch` gives a host the C++'s full pipeline: raw MIDI bytes in,
+  `Multi` calls out.
 
 Fixed-point (STM32F2, Cortex-M3, no FPU), `mi-braids`/`mi-edges`-style
 verbatim arithmetic: 32-bit phase accumulators, calibrated DAC code tables,
-BLEP-antialiased oscillator. `mi-stmlib` gained `NoteStack<N>` and
+BLEP-antialiased oscillator. `mi-stmlib` gained `NoteStack<N>`,
 `VoiceAllocator<N>` (`stmlib/algorithms/{note_stack,voice_allocator}.h`,
-needed by `Part` and not previously ported) alongside the `RingBuffer`,
-`fixed::*` and `random::Random` the first increment already used.
+needed by `Part`) and `MidiStreamParser`/`MidiEventHandler`
+(`stmlib/midi/midi.h`) -- none previously ported -- alongside the
+`RingBuffer`, `fixed::*` and `random::Random` the first increment already
+used.
 
-### Deferred: `midi_handler.{cc,h}`
+### What's still not ported, from `midi_handler.{cc,h}`
 
-`midi_handler.{cc,h}` (271+291 lines) is MIDI byte-stream parsing (running
-status, SysEx) plus SysEx-driven calibration/factory-testing/storage
-protocol handling. The byte-parsing itself has no state this crate's other
-types need, and its *dispatch* (`MidiHandler::NoteOn`/`ControlChange`/etc.,
-which just forward into `Multi` and optionally echo to a MIDI-out buffer)
-is exactly what a host is expected to do by calling `Multi`'s methods
-directly -- the same "host hands already-parsed events to the engine"
-pattern as `mi-plaits` taking an `EngineParameters` rather than raw ADC
-codes. The SysEx-specific pieces (scale/octave tuning dumps, the
-Yarns-specific packet protocol for save/restore and calibration) are all
-tied to `storage_manager`/calibration workflows that are out of scope
-anyway.
+The SysEx-specific pieces (scale/octave tuning dumps, the Yarns-specific
+packet protocol for save/restore and calibration) are tied to
+`storage_manager`/calibration workflows that are out of scope, so
+`MidiDispatch` doesn't override `sysex_start`/`sysex_byte`/`sysex_end`
+(defaulted to no-ops by `stmlib::MidiEventHandler`). `MidiHandler`'s raw
+input byte queue (`PushByte`/`ProcessInput`, a `RingBuffer<u8, 128>` an ISR
+fills and the main loop drains into the parser) is host-side plumbing with
+no DSP content -- a host can call `MidiStreamParser::push_byte` directly as
+bytes arrive.
 
 ### Out of scope entirely
 
@@ -86,10 +98,19 @@ the same approach as `mi-braids`/`mi-edges` -- left as future work).
   `clock`/`refresh`/`render_audio`/`get_cv_gate`/`get_audio_source` over
   6000 blocks, then confirms a plain note-on in Mono layout gates a voice;
 - plays the built-in demo song through past its own length (so it wraps at
-  least once) and confirms it produces non-silent audio.
+  least once) and confirms it produces non-silent audio;
+- drives `Multi` through `MidiStreamParser` + `MidiDispatch` with a raw
+  byte stream exercising running status, a realtime clock byte interleaved
+  mid-message, and note-on-with-zero-velocity-as-note-off, confirming the
+  note on/off bytes actually gate a voice and the interleaved clock byte
+  reaches `MidiOut`;
+- feeds a batch of malformed/edge-case bytes (stray data bytes with no
+  status, an unmatched SysEx terminator, truncated multi-byte messages,
+  every realtime byte back to back) through the same pipeline, asserting
+  only that nothing panics.
 
-All four assert no panics; the first three assert no panics plus the
-specific behavioural properties above.
+All these assert no panics; most also assert the specific behavioural
+properties described above.
 
 ### A real bug this port's fidelity check caught (from the first increment)
 
@@ -195,6 +216,35 @@ From this increment (`part.rs`/`multi.rs`):
   it's the far more frequently called of the two clashing pairs) and
   `reset_all` (renamed from `reset`).
 
+From this increment (`stmlib::midi`/`midi_dispatch.rs`):
+- **`MidiStreamParser<Handler>`'s C++ template calls *static* methods on
+  `Handler`** (compile-time "static polymorphism" -- exactly one `Handler`
+  type per parser instantiation, so no vtable needed). Ported as a trait,
+  `MidiEventHandler`, with every method defaulted to a no-op
+  (`check_channel` to `true`, matching the only C++ handler in this
+  workspace, `yarns::MidiHandler::CheckChannel`), and `MidiStreamParser`
+  itself holds no handler -- `push_byte` takes `&mut impl MidiEventHandler`
+  explicitly, the same "pass the shared/callback state as a parameter"
+  pattern used throughout this crate and `mi-marbles`.
+- **`MidiOut`'s methods are now all defaulted to no-ops** (previously,
+  before this increment, `internal_note_on`/`internal_note_off`/
+  `clock_tick`/`start`/`stop` were required). `MidiDispatch` needs several
+  more MidiOut methods than `Part`/`Multi` alone did (aftertouch/CC/
+  pitch-bend/program-change echo, plus `raw_byte_thru` for
+  `MidiHandler::RawByte`'s MIDI-thru forwarding when `direct_thru()` is
+  true) -- defaulting the whole trait keeps a host that only cares about a
+  few event kinds (say, just note on/off for polychaining) from having to
+  stub out methods it doesn't use.
+- **`MidiHandler::NoteOn`/`NoteOff` and `Part`'s internal note generation
+  send the identical wire bytes** (`0x90|channel, note, velocity` /
+  `0x80|channel, note, 0`) for two different reasons (selective thru of a
+  directly-played note vs. an arpeggiator/sequencer/polychained note) --
+  kept as separate `MidiOut` methods (`note_on`/`note_off` vs.
+  `internal_note_on`/`internal_note_off`) since a host may want to tell the
+  two apart (e.g. to avoid double-echoing a note it just received
+  verbatim), even though their default no-op bodies mean a host that
+  doesn't care can implement just one pair, or neither.
+
 ## Source inventory (DSP + UI, drivers/bootloader/resources excluded)
 
 | file | lines | ported? |
@@ -204,8 +254,9 @@ From this increment (`part.rs`/`multi.rs`):
 | `just_intonation_processor.h` | 118 | yes |
 | `layout_configurator.cc` | 153 | no (out of scope, UI) |
 | `layout_configurator.h` | 107 | no |
-| `midi_handler.cc` | 271 | no (deferred, see above) |
-| `midi_handler.h` | 291 | no |
+| `midi_handler.cc` | 271 | partial -- dispatch logic in `src/midi_dispatch.rs`; SysEx handling out of scope (see above) |
+| `midi_handler.h` | 291 | partial |
+| `stmlib/midi/midi.h` | 222 | yes -- `mi-stmlib`'s `src/midi.rs` |
 | `multi.cc` | 864 | yes -- `src/multi.rs` (minus the out-of-scope pieces noted above) |
 | `multi.h` | 474 | yes |
 | `part.cc` | 758 | yes -- `src/part.rs` (minus the out-of-scope pieces noted above) |
@@ -256,6 +307,8 @@ to the source by parsing both independently and comparing token lists.
   trick needed, its arrays are exactly `N`-sized). Both have unit tests
   covering the tricky bits (`NoteStack`'s LIFO monosynth behaviour and
   saturation eviction; `VoiceAllocator`'s retriggering and voice-stealing).
+- `MidiDispatch` needs `stmlib::midi::{MidiStreamParser, MidiEventHandler}`
+  (`midi.rs` -- see "Ported" above; not previously ported by any crate).
 - `fixed::{interpolate_824_i16, interpolate_824_u16, interpolate_1022}` and
   `random::Random` (added for the first increment) cover everything else.
 
