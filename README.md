@@ -17,7 +17,7 @@ modules](https://github.com/pichenettes/eurorack) to `no_std` library crates.
 | `mi-tides`       | Tides tidal modulator (2014, fixed-point)    | **ported**; `Generator` verified **bit-identical** to the C firmware DSP over an 18-way {range x mode x sync} sweep |
 | `mi-tides2`      | Tides2 tidal modulator (2018, floating-point)| **ported**; `PolySlopeGenerator`/`RampGenerator`/`RampExtractor` — a 24-way sweep comes out bit-identical to the C on this toolchain (no bit-exactness *contract*, see its `PORTING.md`) |
 | `mi-marbles`     | Marbles random sampler / CV generator        | **ported**, floating-point (no bit-exactness contract); the T-section (complementary/independent Bernoulli, three-states, drums, markov, clusters/divider gate generators) + the X/Y section (4-channel quantized/unquantized random voltage generation); smoke-tested (no C harness — the C test drives real hardware capture) |
-| `mi-yarns`       | Yarns MIDI interface                         | **partially ported**, fixed-point; `Voice`/`Oscillator` (portamento, vibrato with a clock-synced-LFO PLL, 6 trigger envelope shapes, a 5-waveform BLEP oscillator, calibrated DAC code lookup) + `JustIntonationProcessor` + `InternalClock` — the self-contained audio-rate/timing layer only; note allocation, the arpeggiator, MIDI parsing, multi-part routing and the song recorder are deferred (see its `PORTING.md`); smoke-tested |
+| `mi-yarns`       | Yarns MIDI interface                         | **ported**, fixed-point; `Voice`/`Oscillator` (portamento, vibrato/PLL-synced LFO, 6 trigger shapes, a 5-waveform BLEP oscillator) + `JustIntonationProcessor` + `InternalClock` + `Part` (9 voice-allocation modes, arpeggiator, 64-step sequencer) + `Multi` (11 layouts, shared clock, CV/gate/audio-source derivation, the built-in demo song); MIDI byte-stream parsing is deferred to the host, settings/UI/storage out of scope (see its `PORTING.md`); smoke-tested |
 | `mi-branches` … `mi-warps` (7 more) | one crate per remaining module | **scaffold** — `Cargo.toml` + `lib.rs` + a per-crate `PORTING.md` source inventory |
 
 `braids` is the worked example every fixed-point module port should follow;
@@ -51,8 +51,9 @@ crates/
                                    distributions, output_channel, random_sequence,
                                    random_stream), resources
   yarns/             mi-yarns    — voice, oscillator, just_intonation_processor,
-                                   internal_clock (partial port — see its PORTING.md),
-                                   resources
+                                   internal_clock, part (note allocation, arpeggiator,
+                                   sequencer), multi (MIDI routing, layouts, clock,
+                                   demo song), song, midi_out, resources
   <module>/          mi-<module> — scaffold + PORTING.md
 tools/
   transpile_resources.py   C `resources.cc` -> Rust `static` arrays
