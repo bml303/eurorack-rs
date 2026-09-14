@@ -28,6 +28,7 @@ pub mod fixed;
 pub mod gate_flags;
 pub mod hysteresis_quantizer;
 pub mod limiter;
+pub mod note_stack;
 pub mod parameter_interpolator;
 pub mod pattern_predictor;
 pub mod polyblep;
@@ -35,6 +36,7 @@ pub mod random;
 pub mod ring_buffer;
 pub mod rsqrt;
 pub mod units;
+pub mod voice_allocator;
 
 mod units_lut;
 
@@ -47,10 +49,12 @@ pub use fixed::{
 };
 pub use hysteresis_quantizer::{HysteresisQuantizer, HysteresisQuantizer2};
 pub use limiter::Limiter;
+pub use note_stack::{NoteEntry, NoteStack, NoteStackPriority};
 pub use parameter_interpolator::ParameterInterpolator;
 pub use pattern_predictor::PatternPredictor;
 pub use random::Random;
 pub use ring_buffer::RingBuffer;
+pub use voice_allocator::{VoiceAllocator, VoiceStealingMode};
 
 /// `CLIP(x)` from `stmlib.h`: clamp to the 16-bit *signed* range, but using the
 /// asymmetric bound `[-32767, 32767]` that the original macro uses.

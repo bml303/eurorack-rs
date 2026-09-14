@@ -9,13 +9,13 @@ repo at `../eurorack`) to `no_std` library crates — one crate per module plus
 `mi-stmlib` for the shared code. `mi-braids` (fixed-point, bit-verified),
 `mi-plaits`, `mi-clouds`, `mi-elements`, `mi-rings`, `mi-tides`, `mi-tides2`
 and `mi-marbles` (floating-point) plus `mi-edges` and `mi-yarns`
-(fixed-point) are ported; `mi-yarns` only partially — see its `PORTING.md`,
-since Yarns is a MIDI sequencer/router rather than an audio voice engine and
-most of it (note allocation/arpeggiator, MIDI parsing, multi-part routing,
-song recorder) is deferred. The other 7 module crates are scaffolds
-(`Cargo.toml` + `lib.rs` + `PORTING.md` inventory). Read `PORTING.md` before
-porting anything — it has the fidelity contract and the verification
-workflow.
+(fixed-point) are ported; `mi-yarns` is a MIDI sequencer/router rather than
+an audio voice engine, so most of its scope cuts are "settings/ui/storage
+are out, and MIDI byte-stream parsing is deferred to the host" rather than
+missing DSP — see its `PORTING.md` for exactly what that means. The other 7
+module crates are scaffolds (`Cargo.toml` + `lib.rs` + `PORTING.md`
+inventory). Read `PORTING.md` before porting anything — it has the
+fidelity contract and the verification workflow.
 
 ## Commands
 

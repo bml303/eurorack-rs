@@ -1,11 +1,15 @@
 //! Crash / sanity smoke test: `Voice` (every audio mode, note on/off with
-//! portamento, vibrato, every trigger shape) and `JustIntonationProcessor`
-//! must survive a long sweep without panicking, and `Voice`'s oscillator
-//! must produce a non-silent, bounded 16-bit-DAC-range signal.
+//! portamento, vibrato, every trigger shape), `JustIntonationProcessor` and
+//! `Multi` (every layout, every voice-allocation mode, the arpeggiator, the
+//! step sequencer, the built-in demo song) must survive a long sweep
+//! without panicking, and `Voice`'s oscillator must produce a non-silent,
+//! bounded 16-bit-DAC-range signal.
 
+use yarns::multi::Layout;
 use yarns::oscillator::audio_mode;
+use yarns::part::{ArpeggiatorDirection, VoiceAllocationMode, VoicingSettings};
 use yarns::voice::trigger_shape;
-use yarns::{JustIntonationProcessor, Voice};
+use yarns::{JustIntonationProcessor, Multi, NullMidiOut, Voice};
 
 fn audio_modes() -> [u8; 6] {
     [
@@ -136,5 +140,171 @@ fn just_intonation_processor_survives_a_long_sweep() {
             "pitch for note {note} drifted too far: {pitch} vs expected ~{expected}"
         );
     }
+}
+
+fn layouts() -> [Layout; 11] {
+    [
+        Layout::Mono,
+        Layout::DualMono,
+        Layout::QuadMono,
+        Layout::DualPoly,
+        Layout::QuadPoly,
+        Layout::DualPolychained,
+        Layout::QuadPolychained,
+        Layout::OctalPolychained,
+        Layout::QuadTriggers,
+        Layout::QuadVoltages,
+        Layout::ThreeOne,
+    ]
+}
+
+fn allocation_modes() -> [VoiceAllocationMode; 9] {
+    [
+        VoiceAllocationMode::Mono,
+        VoiceAllocationMode::Poly,
+        VoiceAllocationMode::PolyCyclic,
+        VoiceAllocationMode::PolyRandom,
+        VoiceAllocationMode::PolyVelocity,
+        VoiceAllocationMode::PolySorted,
+        VoiceAllocationMode::PolyUnison1,
+        VoiceAllocationMode::PolyUnison2,
+        VoiceAllocationMode::PolyStealMostRecent,
+    ]
+}
+
+#[test]
+fn multi_survives_a_long_sweep_across_every_layout_and_allocation_mode() {
+    let mut multi = Multi::new();
+    multi.init(true);
+    let mut midi_out = NullMidiOut;
+
+    let layouts = layouts();
+    let allocation_modes = allocation_modes();
+    let notes = [36u8, 43, 48, 52, 55, 60, 64, 67, 72];
+
+    let mut cv = [0u16; 4];
+    let mut gate = [false; 4];
+    let mut audio_source = [0u8; 4];
+
+    for step in 0..6000i32 {
+        if step % 130 == 0 {
+            multi.set_layout(layouts[(step as usize / 130) % layouts.len()]);
+        }
+        if step % 47 == 0 {
+            let mode = allocation_modes[(step as usize / 47) % allocation_modes.len()];
+            let voicing = VoicingSettings {
+                allocation_mode: mode,
+                portamento: (step % 100) as u8,
+                pitch_bend_range: 1 + (step % 12) as u8,
+                vibrato_range: (step % 4) as u8,
+                // Valid range is 0..=111: 0..99 index `LUT_LFO_INCREMENTS`,
+                // 100..=111 select one of the 12 `CLOCK_DIVISIONS` for a
+                // clock-synced LFO (unchecked in the C++ too -- the front
+                // panel UI, out of scope here, is what keeps it in range).
+                modulation_rate: (step % 112) as u8,
+                trigger_duration: (step % 8) as u8,
+                aux_cv: (step as usize) % 8,
+                aux_cv_2: (step as usize + 2) % 8,
+                ..VoicingSettings::default()
+            };
+            multi.set_part_voicing_settings(0, voicing);
+        }
+        if step % 211 == 0 {
+            let mut seq = *multi.mutable_part(0).sequencer_settings();
+            seq.arp_range = 1 + (step % 4) as u8;
+            seq.arp_direction = match (step / 211) % 5 {
+                0 => ArpeggiatorDirection::Up,
+                1 => ArpeggiatorDirection::Down,
+                2 => ArpeggiatorDirection::UpDown,
+                3 => ArpeggiatorDirection::Random,
+                _ => ArpeggiatorDirection::AsPlayed,
+            };
+            multi.mutable_part(0).set_sequencer_settings(seq);
+        }
+
+        let channel = 0u8;
+        if step % 13 == 0 {
+            let note = notes[(step as usize / 13) % notes.len()];
+            multi.note_on(&mut midi_out, channel, note, 100);
+        }
+        if step % 29 == 0 {
+            let note = notes[(step as usize / 29 + 1) % notes.len()];
+            multi.note_off(&mut midi_out, channel, note, 0);
+        }
+        if step % 37 == 0 {
+            multi.control_change(channel, 1, (step % 128) as u8);
+        }
+        if step % 53 == 0 {
+            multi.pitch_bend(channel, ((step * 41) % 16384) as u16);
+        }
+        if step % 71 == 0 {
+            multi.aftertouch(channel, (step % 128) as u8);
+        }
+
+        multi.clock(&mut midi_out);
+        multi.refresh(&mut midi_out);
+        multi.render_audio();
+
+        multi.get_cv_gate(&mut cv, &mut gate);
+        multi.get_audio_source(&mut audio_source);
+        for &v in cv.iter() {
+            let _ = v; // u16 DAC code: always in range by construction.
+        }
+    }
+
+    // A basic liveness check: after driving a long, varied sequence of
+    // notes, at least one voice should have produced a non-default DAC
+    // code at some point (checked by re-running a short burst and sampling).
+    // `arp_range` may still be nonzero on part 0 from earlier in the sweep,
+    // in which case a plain `note_on` doesn't gate the voice directly (the
+    // arpeggiator would need to clock a note through first) -- reset it so
+    // this is a plain monophonic note-on, matching the assertion below.
+    multi.set_layout(Layout::Mono);
+    let mut seq = *multi.mutable_part(0).sequencer_settings();
+    seq.arp_range = 0;
+    multi.mutable_part(0).set_sequencer_settings(seq);
+    multi.note_on(&mut midi_out, 0, 60, 100);
+    multi.clock(&mut midi_out);
+    multi.refresh(&mut midi_out);
+    multi.get_cv_gate(&mut cv, &mut gate);
+    assert!(gate[0], "voice 0 should be gated on after a note-on in Mono layout");
+}
+
+#[test]
+fn built_in_song_plays_through_without_panicking() {
+    let mut multi = Multi::new();
+    multi.init(true);
+    let mut midi_out = NullMidiOut;
+
+    multi.start_song(&mut midi_out);
+    assert!(multi.running());
+
+    let mut cv = [0u16; 4];
+    let mut gate = [false; 4];
+    let mut energy = 0.0f64;
+    let mut count = 0u64;
+
+    // The song is short (a few bars); tick it well past its own length so
+    // it wraps at least once (`SONG[pointer] == 255` restarts it), then
+    // check the CV/gate/audio outputs are still sane.
+    for _ in 0..20_000 {
+        multi.refresh_internal_clock();
+        multi.process_internal_clock_events(&mut midi_out);
+        multi.refresh(&mut midi_out);
+        multi.render_audio();
+
+        multi.get_cv_gate(&mut cv, &mut gate);
+        for voice in 0..4 {
+            for _ in 0..8 {
+                let sample = multi.mutable_voice(voice).read_sample();
+                let centered = sample as f64 - 32768.0;
+                energy += centered * centered;
+                count += 1;
+            }
+        }
+    }
+
+    let rms = (energy / count as f64).sqrt();
+    assert!(rms > 0.0, "song playback produced only silence (rms = {rms})");
 }
 
