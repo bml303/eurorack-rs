@@ -20,7 +20,8 @@ modules](https://github.com/pichenettes/eurorack) to `no_std` library crates.
 | `mi-yarns`       | Yarns MIDI interface                         | **ported**, fixed-point; `Voice`/`Oscillator` (portamento, vibrato/PLL-synced LFO, 6 trigger shapes, a 5-waveform BLEP oscillator) + `JustIntonationProcessor` + `InternalClock` + `Part` (9 voice-allocation modes, arpeggiator, 64-step sequencer) + `Multi` (11 layouts, shared clock, CV/gate/audio-source derivation, the built-in demo song) + `MidiDispatch`/`mi-stmlib`'s `MidiStreamParser` (raw MIDI byte stream — running status, realtime interleaving, SysEx framing — straight into `Multi`); SysEx calibration/storage protocol and settings/UI/storage out of scope (see its `PORTING.md`); smoke-tested |
 | `mi-grids`       | Grids topographic drum sequencer (AVR)       | **ported**, fixed-point; `PatternGenerator` (25-map drum-density lookup + Euclidean-rhythm generator, both output modes) + `Clock` (tempo/swing phase accumulator); `LoadSettings`/`SaveSettings` (EEPROM) and the app-level main loop out of scope (see its `PORTING.md`); smoke-tested (no C harness) |
 | `mi-warps`       | Warps meta-modulator (cross-mod, vocoder)    | **ported**, floating-point (no bit-exactness contract); `Modulator` — 6 cross-modulation algorithms at x6 oversampling, a 20-band `Vocoder`/`FilterBank`, the frequency-shifter easter egg; smoke-tested (no C harness — the C test needs an external WAV file not in the repo) |
-| `mi-branches` … `mi-streams` (5 more) | one crate per remaining module | **scaffold** — `Cargo.toml` + `lib.rs` + a per-crate `PORTING.md` source inventory |
+| `mi-branches`    | Branches dual Bernoulli gate (AVR)           | **ported**, fixed-point; `Channel`/`Branches` — rising-edge probabilistic gate/toggle decision + the free-running 32-bit LFSR; switch-UI/EEPROM persistence out of scope (see its `PORTING.md`); smoke-tested (no C harness) |
+| `mi-frames`, `mi-peaks`, `mi-stages`, `mi-streams` (4 more) | one crate per remaining module | **scaffold** — `Cargo.toml` + `lib.rs` + a per-crate `PORTING.md` source inventory |
 
 `braids` is the worked example every fixed-point module port should follow;
 `plaits` is the worked example for a floating-point module (no bit-exactness
@@ -63,6 +64,8 @@ crates/
                                    quadrature_oscillator, quadrature_transform,
                                    sample_rate_converter, filter_bank, vocoder, limiter,
                                    parameters, resources
+  branches/          mi-branches — Channel/Branches (gate decision), rng (AVR LFSR),
+                                   resources
   <module>/          mi-<module> — scaffold + PORTING.md
 tools/
   transpile_resources.py   C `resources.cc` -> Rust `static` arrays
