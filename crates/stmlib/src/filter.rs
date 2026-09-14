@@ -422,3 +422,102 @@ impl NaiveSvf {
         self.bp
     }
 }
+
+/// `stmlib::CrossoverSvf` -- two cascaded naive/direct SVF sections (used by
+/// `mi-warps`' `FilterBank` to build steep band-splitting filters from cheap
+/// single-pole-feeling stages).
+#[derive(Debug, Clone, Copy, Default)]
+pub struct CrossoverSvf {
+    f: f32,
+    fq: f32,
+    x: [f32; 2],
+    lp: [f32; 2],
+    bp: [f32; 2],
+}
+
+impl CrossoverSvf {
+    pub fn init(&mut self) {
+        self.reset();
+    }
+
+    pub fn reset(&mut self) {
+        self.lp = [0.0; 2];
+        self.bp = [0.0; 2];
+        self.x = [0.0; 2];
+    }
+
+    #[inline]
+    pub fn set_f_fq(&mut self, f: f32, fq: f32) {
+        self.f = f;
+        self.fq = fq;
+    }
+
+    #[inline]
+    #[allow(clippy::too_many_arguments)]
+    fn step(
+        mode: FilterMode,
+        f: f32,
+        fq: f32,
+        lp_1: &mut f32,
+        bp_1: &mut f32,
+        x_1: &mut f32,
+        lp_2: &mut f32,
+        bp_2: &mut f32,
+        x_2: &mut f32,
+        input: f32,
+    ) -> f32 {
+        *lp_1 += f * *bp_1;
+        *bp_1 += -fq * *bp_1 - f * *lp_1 + input;
+        if mode == FilterMode::BandPass || mode == FilterMode::BandPassNormalized {
+            *bp_1 += *x_1;
+        }
+        *x_1 = input;
+
+        let y = match mode {
+            FilterMode::LowPass => *lp_1 * f,
+            FilterMode::BandPass => *bp_1 * f,
+            FilterMode::BandPassNormalized => *bp_1 * fq,
+            FilterMode::HighPass => *x_1 - *lp_1 * f - *bp_1 * fq,
+        };
+
+        *lp_2 += f * *bp_2;
+        *bp_2 += -fq * *bp_2 - f * *lp_2 + y;
+        if mode == FilterMode::BandPass || mode == FilterMode::BandPassNormalized {
+            *bp_2 += *x_2;
+        }
+        *x_2 = y;
+
+        match mode {
+            FilterMode::LowPass => *lp_2 * f,
+            FilterMode::BandPass => *bp_2 * f,
+            FilterMode::BandPassNormalized => *bp_2 * fq,
+            FilterMode::HighPass => *x_2 - *lp_2 * f - *bp_2 * fq,
+        }
+    }
+
+    pub fn process(&mut self, mode: FilterMode, input: &[f32], out: &mut [f32]) {
+        let (mut lp_1, mut bp_1, mut lp_2, mut bp_2) = (self.lp[0], self.bp[0], self.lp[1], self.bp[1]);
+        let (mut x_1, mut x_2) = (self.x[0], self.x[1]);
+        let (f, fq) = (self.f, self.fq);
+        for (i, o) in input.iter().zip(out.iter_mut()) {
+            *o = Self::step(mode, f, fq, &mut lp_1, &mut bp_1, &mut x_1, &mut lp_2, &mut bp_2, &mut x_2, *i);
+        }
+        self.lp = [lp_1, lp_2];
+        self.bp = [bp_1, bp_2];
+        self.x = [x_1, x_2];
+    }
+
+    /// `Process<mode>(buf, buf, size)` -- the C's in-place call, where `in`
+    /// and `out` alias.
+    pub fn process_in_place(&mut self, mode: FilterMode, buf: &mut [f32]) {
+        let (mut lp_1, mut bp_1, mut lp_2, mut bp_2) = (self.lp[0], self.bp[0], self.lp[1], self.bp[1]);
+        let (mut x_1, mut x_2) = (self.x[0], self.x[1]);
+        let (f, fq) = (self.f, self.fq);
+        for s in buf.iter_mut() {
+            *s = Self::step(mode, f, fq, &mut lp_1, &mut bp_1, &mut x_1, &mut lp_2, &mut bp_2, &mut x_2, *s);
+        }
+        self.lp = [lp_1, lp_2];
+        self.bp = [bp_1, bp_2];
+        self.x = [x_1, x_2];
+    }
+}
