@@ -1,6 +1,6 @@
 //! Rust port of Mutable Instruments **Plaits** -- a macro oscillator with 24
 //! synthesis models, spanning classic analog waveforms, FM, physical
-//! modelling, granular synthesis, noise and (eventually) speech/FM-8op voices.
+//! modelling, granular synthesis, noise and speech.
 //!
 //! # Status
 //!
@@ -12,8 +12,7 @@
 //! on a Cortex-M, which doesn't apply to a portable library), `Option`/slices
 //! instead of nullable pointers.
 //!
-//! 23 of the 24 engine models are ported; `SpeechEngine` is a documented
-//! silent stub. See `PORTING.md` for the full status.
+//! All 24 engine models are ported. See `PORTING.md` for the full status.
 #![no_std]
 #![allow(
     clippy::too_many_arguments,

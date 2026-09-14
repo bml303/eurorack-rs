@@ -6,6 +6,7 @@ use alloc::boxed::Box;
 use alloc::vec;
 
 use super::lpc_speech_synth::{LPC_SPEECH_SYNTH_DEFAULT_F0, LpcSpeechSynth, LpcSpeechSynthFrame};
+use crate::dsp::CORRECTED_SAMPLE_RATE;
 use super::lpc_speech_synth_phonemes::PHONEMES;
 use super::lpc_speech_synth_words::{NUM_WORD_BANKS, WORD_BANKS};
 use crate::utils::parameter_interpolator::ParameterInterpolator;
@@ -88,7 +89,7 @@ impl LpcSpeechSynthController<'_> {
 
         // All utterances have been normalized for an average f0 of 100 Hz.
         let pitch_shift =
-            frequency / (rate_ratio * LPC_SPEECH_SYNTH_DEFAULT_F0 / self.sample_rate_hz);
+            frequency / (rate_ratio * LPC_SPEECH_SYNTH_DEFAULT_F0 / CORRECTED_SAMPLE_RATE);
         let time_stretch = semitones_to_ratio(
             -speed * 24.0
                 + (if formant_shift < 0.4 {
@@ -416,7 +417,7 @@ const PERIOD_LUT: [u8; 64] = [
 ];
 
 const K0_LUT: [i16; 32] = [
-    32064, -31872, -31808, -31680, -31552, -31424, -31232, -30848, -30592, -30336, -30016, -29696,
+    -32064, -31872, -31808, -31680, -31552, -31424, -31232, -30848, -30592, -30336, -30016, -29696,
     -29376, -28928, -28480, -27968, -26368, -24256, -21632, -18368, -14528, -10048, -5184, 0, 5184,
     10048, 14528, 18368, 21632, 24256, 26368, 27968,
 ];
