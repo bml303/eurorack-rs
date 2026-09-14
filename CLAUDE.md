@@ -8,15 +8,16 @@ A Rust workspace porting the DSP of Mutable Instruments' Eurorack firmware (the 
 repo at `../eurorack`) to `no_std` library crates — one crate per module plus
 `mi-stmlib` for the shared code. `mi-braids` (fixed-point, bit-verified),
 `mi-plaits`, `mi-clouds`, `mi-elements`, `mi-rings`, `mi-tides`, `mi-tides2`,
-`mi-marbles` and `mi-warps` (floating-point) plus `mi-edges`, `mi-yarns`,
-`mi-grids`, `mi-branches`, `mi-frames`, `mi-streams` and `mi-peaks`
-(fixed-point) are ported; `mi-yarns` is a MIDI sequencer/router rather than
-an audio voice engine, so its scope cuts are mostly "settings/ui/storage/
-SysEx-calibration are out" rather than missing DSP — see its `PORTING.md`
-for exactly what that means. `mi-stages` is the only remaining scaffold
-(`Cargo.toml` + `lib.rs` + `PORTING.md` inventory). Read `PORTING.md`
-before porting anything — it has the fidelity contract and the
-verification workflow.
+`mi-marbles`, `mi-warps` and `mi-stages` (floating-point) plus `mi-edges`,
+`mi-yarns`, `mi-grids`, `mi-branches`, `mi-frames`, `mi-streams` and
+`mi-peaks` (fixed-point) are ported — all 16 modules. `mi-yarns` is a MIDI
+sequencer/router rather than an audio voice engine, so its scope cuts are
+mostly "settings/ui/storage/SysEx-calibration are out" rather than missing
+DSP — see its `PORTING.md` for exactly what that means. `mi-stages` cuts
+similarly: the inter-module serial-link "chain" protocol (`chain_state.cc`),
+flash settings, and the ADC/pot reader are out, but the segment-generator
+engine itself is complete. Read `PORTING.md` before porting anything — it
+has the fidelity contract and the verification workflow.
 
 ## Commands
 
