@@ -2,11 +2,11 @@
 //! evaluated along an elliptical path, computed on the fly rather than
 //! looked up from a stored table.
 //!
-//! `terrain_index == 8` (a user-supplied terrain loaded from flash) is kept
-//! for fidelity but is unreachable in this port since nothing wires flash
-//! storage into [`Engine::load_user_data`] yet -- `user_terrain` is always
-//! `None`, so [`WaveTerrainEngine::terrain`] never selects it and
-//! `num_terrains` stays 8.
+//! `terrain_index == 8` is a user-supplied terrain (in the C, loaded from
+//! flash; here, wired through [`crate::voice::Voice::set_user_terrain`] to
+//! whatever the host application loads at runtime). It's only reachable once
+//! something has called `load_user_data` with `Some(data)` -- until then
+//! `user_terrain` stays `None` and `num_terrains` stays 8.
 
 extern crate alloc;
 
@@ -15,8 +15,8 @@ use alloc::vec;
 
 use stmlib::parameter_interpolator::ParameterInterpolator;
 
-use crate::engine::{note_to_frequency, Engine, EngineParameters, PostProcessingSettings};
-use crate::oscillator::{sine, FastSineOscillator};
+use crate::engine::{Engine, EngineParameters, PostProcessingSettings, note_to_frequency};
+use crate::oscillator::{FastSineOscillator, sine};
 use crate::resources::WAV_INTEGRATED_WAVES;
 
 const OVERSAMPLING: usize = 2;

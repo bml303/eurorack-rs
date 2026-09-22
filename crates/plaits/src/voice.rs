@@ -16,9 +16,11 @@
 //!   `SYX_BANK_{0,1,2}` FM patch banks into the single shared
 //!   [`crate::engines::SixOpEngine`] instance (matching the C's
 //!   `RegisterInstance(&six_op_engine_, ...)` called three times against one
-//!   object). The wavetable/wave-terrain engines' optional *user* tables
-//!   have no such bundled fallback in the C and so stay `None`/built-in here
-//!   too.
+//!   object). The wavetable engine's optional *user* table has no such
+//!   bundled fallback in the C and so stays built-in-only here. The
+//!   wave-terrain engine's optional *user* terrain (`Voice::set_user_terrain`)
+//!   is wired to whatever the host application loads at runtime (e.g. from
+//!   an SD card), rather than to flash.
 
 use stmlib::units::semitones_to_ratio;
 use stmlib::{DelayLine, HysteresisQuantizer2, Limiter};
@@ -254,6 +256,7 @@ pub struct Voice<'a> {
     engine_quantizer: HysteresisQuantizer2,
 
     reload_user_data: bool,
+    user_terrain: Option<&'static [u8]>,
     previous_engine_index: i32,
     engine_cv: f32,
 
@@ -300,6 +303,7 @@ impl Voice<'_> {
             engine_quantizer: HysteresisQuantizer2::default(),
 
             reload_user_data: false,
+            user_terrain: None,
             previous_engine_index: -1,
             engine_cv: 0.0,
 
@@ -393,6 +397,15 @@ impl Voice<'_> {
         self.reload_user_data = true;
     }
 
+    /// Sets the user-supplied waveterrain (a 64x64 grid of signed 8-bit
+    /// samples) picked up by `WaveTerrainEngine` as terrain index 8. Takes
+    /// effect the next time the engine reloads its data -- pair with
+    /// [`Voice::reload_user_data`] if the wave terrain engine is already
+    /// selected.
+    pub fn set_user_terrain(&mut self, data: Option<&'static [u8]>) {
+        self.user_terrain = data;
+    }
+
     #[inline]
     pub fn active_engine(&self) -> i32 {
         self.previous_engine_index
@@ -447,12 +460,9 @@ impl Voice<'_> {
                     self.six_op_engine
                         .load_syx_bank(&crate::resources::SYX_BANK_2);
                 }
-                // Engine 5 (WaveTerrainEngine) intentionally gets no case here:
-                // its `user_terrain` stays `None` (no user-uploaded terrain --
-                // see its own module doc), which is what selects the 8
-                // built-in terrains. A prior version of this match mistakenly
-                // fed it `SYX_BANK_0` (the six-op FM patch bank) as if it were
-                // an 8-bit terrain height-map.
+                5 => {
+                    self.wave_terrain_engine.load_user_data(self.user_terrain);
+                }
                 13 => {
                     self.wavetable_engine
                         .set_wavetables(&crate::resources::WAV_INTEGRATED_WAVES);
