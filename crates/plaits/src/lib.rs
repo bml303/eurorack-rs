@@ -44,4 +44,4 @@ pub mod utils;
 pub mod voice;
 
 pub use engine::{Engine, EngineParameters, PostProcessingSettings};
-pub use voice::{Frame, Modulations, Patch, Voice};
+pub use voice::{Frame, Modulations, Patch, Voice, SYX_BANK_SIZE};

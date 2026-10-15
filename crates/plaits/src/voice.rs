@@ -16,13 +16,19 @@
 //!   `SYX_BANK_{0,1,2}` FM patch banks into the single shared
 //!   [`crate::engines::SixOpEngine`] instance (matching the C's
 //!   `RegisterInstance(&six_op_engine_, ...)` called three times against one
-//!   object). The wavetable engine's optional *user* table has no such
+//!   object). Where the C would find a bank uploaded to flash for one of
+//!   those slots, this port takes one from the host instead
+//!   (`Voice::set_user_fm_bank`), e.g. loaded from an SD card; a slot
+//!   without one keeps its bundled bank. The wavetable engine's optional *user* table has no such
 //!   bundled fallback in the C and so stays built-in-only here. The
 //!   wave-terrain engine's optional *user* terrain (`Voice::set_user_terrain`)
 //!   is wired to whatever the host application loads at runtime (e.g. from
 //!   an SD card), rather than to flash.
 
 use stmlib::units::semitones_to_ratio;
+
+/// A 6-op FM patch bank: 32 packed DX7 voices of 128 bytes
+pub const SYX_BANK_SIZE: usize = 4096;
 use stmlib::{DelayLine, HysteresisQuantizer2, Limiter};
 
 use crate::PostProcessingSettings;
@@ -257,6 +263,7 @@ pub struct Voice<'a> {
 
     reload_user_data: bool,
     user_terrain: Option<&'static [u8]>,
+    user_fm_banks: [Option<&'static [u8; SYX_BANK_SIZE]>; 3],
     previous_engine_index: i32,
     engine_cv: f32,
 
@@ -304,6 +311,7 @@ impl Voice<'_> {
 
             reload_user_data: false,
             user_terrain: None,
+            user_fm_banks: [None; 3],
             previous_engine_index: -1,
             engine_cv: 0.0,
 
@@ -406,6 +414,17 @@ impl Voice<'_> {
         self.user_terrain = data;
     }
 
+    /// Sets (or, with `None`, clears) the user-supplied patch bank of 6-op
+    /// FM slot `slot` (0..=2, engines 2-4): a DX7 32-voice bulk dump's
+    /// 4096 data bytes, played instead of that slot's bundled bank. Takes
+    /// effect the next time the engine reloads its data, as
+    /// [`Voice::set_user_terrain`]. An out-of-range `slot` is ignored.
+    pub fn set_user_fm_bank(&mut self, slot: usize, data: Option<&'static [u8; SYX_BANK_SIZE]>) {
+        if let Some(bank) = self.user_fm_banks.get_mut(slot) {
+            *bank = data;
+        }
+    }
+
     #[inline]
     pub fn active_engine(&self) -> i32 {
         self.previous_engine_index
@@ -450,15 +469,15 @@ impl Voice<'_> {
             match engine_index {
                 2 => {
                     self.six_op_engine
-                        .load_syx_bank(&crate::resources::SYX_BANK_0);
+                        .load_syx_bank(self.user_fm_banks[0].unwrap_or(&crate::resources::SYX_BANK_0));
                 }
                 3 => {
                     self.six_op_engine
-                        .load_syx_bank(&crate::resources::SYX_BANK_1);
+                        .load_syx_bank(self.user_fm_banks[1].unwrap_or(&crate::resources::SYX_BANK_1));
                 }
                 4 => {
                     self.six_op_engine
-                        .load_syx_bank(&crate::resources::SYX_BANK_2);
+                        .load_syx_bank(self.user_fm_banks[2].unwrap_or(&crate::resources::SYX_BANK_2));
                 }
                 5 => {
                     self.wave_terrain_engine.load_user_data(self.user_terrain);

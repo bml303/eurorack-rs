@@ -135,7 +135,7 @@ fn terrain_fn(user_terrain: Option<&'static [u8]>, x: f32, y: f32, terrain_index
         ),
         5 | 6 | 7 => terrain_lookup_wt(x, y, 2 - (terrain_index - 5) as usize),
         8 => {
-            // Unreachable: `user_terrain` is always `None` in this port.
+            // The host's terrain (`Voice::set_user_terrain`), silent without one
             if let Some(data) = user_terrain {
                 // Reinterpret bytes as signed 8-bit terrain samples (same
                 // size/align as u8, just a different read interpretation).
