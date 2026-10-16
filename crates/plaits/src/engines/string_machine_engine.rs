@@ -6,7 +6,7 @@ use stmlib::fdsp::one_pole;
 use stmlib::filter::{FilterMode, FrequencyApproximation, NaiveSvf};
 use stmlib::units::semitones_to_ratio;
 
-use crate::chords::{ChordBank, NUM_NOTES};
+use crate::chords::{Chord, ChordBank, NUM_NOTES};
 use crate::engine::{note_to_frequency, Engine, EngineParameters, PostProcessingSettings};
 use crate::fx::Ensemble;
 use crate::oscillator::StringSynthOscillator;
@@ -61,6 +61,14 @@ impl Default for StringMachineEngine {
             morph_lp: 0.0,
             timbre_lp: 0.0,
         }
+    }
+}
+
+impl StringMachineEngine {
+    /// A user chord table instead of the bundled chords
+    /// ([`ChordBank::set_user_chords`]), from the next `reset`
+    pub fn set_user_chords(&mut self, chords: Option<&'static [Chord]>) {
+        self.chords.set_user_chords(chords);
     }
 }
 

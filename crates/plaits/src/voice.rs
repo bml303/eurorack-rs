@@ -32,6 +32,7 @@ pub const SYX_BANK_SIZE: usize = 4096;
 use stmlib::{DelayLine, HysteresisQuantizer2, Limiter};
 
 use crate::PostProcessingSettings;
+use crate::chords::Chord;
 use crate::dsp::INV_SAMPLE_RATE;
 use crate::engine::{Engine, EngineParameters, note_to_frequency, trigger_state};
 use crate::engines::{
@@ -264,6 +265,7 @@ pub struct Voice<'a> {
     reload_user_data: bool,
     user_terrain: Option<&'static [u8]>,
     user_fm_banks: [Option<&'static [u8; SYX_BANK_SIZE]>; 3],
+    user_chords: Option<&'static [Chord]>,
     previous_engine_index: i32,
     engine_cv: f32,
 
@@ -312,6 +314,7 @@ impl Voice<'_> {
             reload_user_data: false,
             user_terrain: None,
             user_fm_banks: [None; 3],
+            user_chords: None,
             previous_engine_index: -1,
             engine_cv: 0.0,
 
@@ -425,6 +428,17 @@ impl Voice<'_> {
         }
     }
 
+    /// Sets (or, with `None`, clears) the user-supplied chord table played
+    /// by the string machine, chiptune and chords engines (6, 7 and 14)
+    /// instead of their 11 bundled chords: 1 to
+    /// [`MAX_CHORDS`](crate::chords::MAX_CHORDS) chords of
+    /// [`NUM_NOTES`](crate::chords::NUM_NOTES) notes in semitones above the
+    /// root, which HARMONICS steps through. Takes effect the next time the
+    /// engine reloads its data, as [`Voice::set_user_terrain`].
+    pub fn set_user_chords(&mut self, chords: Option<&'static [Chord]>) {
+        self.user_chords = chords;
+    }
+
     #[inline]
     pub fn active_engine(&self) -> i32 {
         self.previous_engine_index
@@ -482,6 +496,9 @@ impl Voice<'_> {
                 5 => {
                     self.wave_terrain_engine.load_user_data(self.user_terrain);
                 }
+                6 => self.string_machine_engine.set_user_chords(self.user_chords),
+                7 => self.chiptune_engine.set_user_chords(self.user_chords),
+                14 => self.chord_engine.set_user_chords(self.user_chords),
                 13 => {
                     self.wavetable_engine
                         .set_wavetables(&crate::resources::WAV_INTEGRATED_WAVES);

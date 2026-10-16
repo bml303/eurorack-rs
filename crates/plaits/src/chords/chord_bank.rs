@@ -1,5 +1,12 @@
 //! `plaits/dsp/chords/chord_bank.h` -- the 11-chord table shared by
-//! `ChordEngine` and `StringMachineEngine`, plus inversion voicing.
+//! `ChordEngine`, `StringMachineEngine` and `ChiptuneEngine`, plus inversion
+//! voicing.
+//!
+//! # Deviations from the C
+//!
+//! - A host can replace the 11 chords with a table of its own (up to
+//!   [`MAX_CHORDS`], [`ChordBank::set_user_chords`]), as Plaits' community
+//!   firmwares do. Without one the bank is exactly the C's.
 
 use stmlib::units::semitones_to_ratio;
 use stmlib::HysteresisQuantizer2;
@@ -7,6 +14,11 @@ use stmlib::HysteresisQuantizer2;
 pub const NUM_NOTES: usize = 4;
 pub const NUM_VOICES: usize = NUM_NOTES + 1;
 pub const NUM_CHORDS: usize = 11;
+/// The most chords a user table holds
+pub const MAX_CHORDS: usize = 16;
+
+/// A chord: its notes in semitones above the root
+pub type Chord = [f32; NUM_NOTES];
 
 #[rustfmt::skip]
 const CHORDS: [[f32; NUM_NOTES]; NUM_CHORDS] = [
@@ -23,21 +35,40 @@ const CHORDS: [[f32; NUM_NOTES]; NUM_CHORDS] = [
     [0.00, 4.00,  7.00, 12.00], // M
 ];
 
+/// How many different pitch classes `chord` has: notes less than a tenth of
+/// a semitone apart, octaves folded, count once
+pub fn pitch_classes(chord: &Chord) -> i32 {
+    let mut count = 0;
+    for (i, &note) in chord.iter().enumerate() {
+        let repeated = chord[..i].iter().any(|&earlier| {
+            let d = (note - earlier) % 12.0;
+            let d = if d < 0.0 { d + 12.0 } else { d };
+            d < 0.1 || d > 11.9
+        });
+        if !repeated {
+            count += 1;
+        }
+    }
+    count
+}
+
 #[derive(Debug)]
 pub struct ChordBank {
     chord_index_quantizer: HysteresisQuantizer2,
-    ratios: [[f32; NUM_NOTES]; NUM_CHORDS],
+    ratios: [[f32; NUM_NOTES]; MAX_CHORDS],
     sorted_ratios: [f32; NUM_NOTES],
-    note_count: [i32; NUM_CHORDS],
+    note_count: [i32; MAX_CHORDS],
+    user_chords: Option<&'static [Chord]>,
 }
 
 impl Default for ChordBank {
     fn default() -> Self {
         Self {
             chord_index_quantizer: HysteresisQuantizer2::default(),
-            ratios: [[0.0; NUM_NOTES]; NUM_CHORDS],
+            ratios: [[0.0; NUM_NOTES]; MAX_CHORDS],
             sorted_ratios: [0.0; NUM_NOTES],
-            note_count: [0; NUM_CHORDS],
+            note_count: [0; MAX_CHORDS],
+            user_chords: None,
         }
     }
 }
@@ -48,7 +79,27 @@ impl ChordBank {
             .init(NUM_CHORDS as i32, 0.075, false);
     }
 
+    /// Plays `chords` (1..=[`MAX_CHORDS`]; more are ignored, none is the
+    /// same as `None`) instead of the 11 bundled chords, or the bundled
+    /// ones again with `None`. Takes effect at the next [`ChordBank::reset`].
+    pub fn set_user_chords(&mut self, chords: Option<&'static [Chord]>) {
+        self.user_chords = chords.filter(|c| !c.is_empty()).map(|c| &c[..c.len().min(MAX_CHORDS)]);
+    }
+
+    /// How many chords HARMONICS steps through
+    pub fn num_chords(&self) -> usize {
+        self.user_chords.map_or(NUM_CHORDS, |c| c.len())
+    }
+
     pub fn reset(&mut self) {
+        if let Some(chords) = self.user_chords {
+            self.reset_user(chords);
+            return;
+        }
+        if self.chord_index_quantizer.num_steps() != NUM_CHORDS as i32 {
+            // Back from a user table
+            self.init();
+        }
         for i in 0..NUM_CHORDS {
             let mut count = 0;
             for j in 0..NUM_NOTES {
@@ -62,6 +113,23 @@ impl ChordBank {
                 }
             }
             self.note_count[i] = count;
+        }
+        self.sort();
+    }
+
+    /// `reset` with a user table. The C counts a chord's notes by leaving
+    /// out its marker values (0.01, 7.01, 11.99, 12.00, which double a note
+    /// or its octave); a user chord counts each pitch class once, which
+    /// gives the same counts for the bundled chords.
+    fn reset_user(&mut self, chords: &[Chord]) {
+        if self.chord_index_quantizer.num_steps() != chords.len() as i32 {
+            self.chord_index_quantizer.init(chords.len() as i32, 0.075, false);
+        }
+        for (i, chord) in chords.iter().enumerate() {
+            for (ratio, &note) in self.ratios[i].iter_mut().zip(chord) {
+                *ratio = semitones_to_ratio(note);
+            }
+            self.note_count[i] = pitch_classes(chord);
         }
         self.sort();
     }
@@ -161,5 +229,52 @@ impl ChordBank {
             }
         }
         mask
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn pitch_classes_count_the_bundled_chords_as_the_c_does() {
+        let mut bank = ChordBank::default();
+        bank.init();
+        bank.reset();
+        for (i, chord) in CHORDS.iter().enumerate() {
+            assert_eq!(pitch_classes(chord), bank.note_count[i], "chord {i}");
+        }
+    }
+
+    #[test]
+    fn harmonics_reaches_every_user_chord() {
+        static SIXTEEN: [Chord; MAX_CHORDS] = {
+            let mut t = [[0.0; NUM_NOTES]; MAX_CHORDS];
+            let mut i = 0;
+            while i < MAX_CHORDS {
+                t[i] = [0.0, i as f32, 7.0, 12.0];
+                i += 1;
+            }
+            t
+        };
+        let mut bank = ChordBank::default();
+        bank.init();
+        bank.set_user_chords(Some(&SIXTEEN));
+        bank.reset();
+        assert_eq!(bank.num_chords(), MAX_CHORDS);
+        for h in [0.0, 1.0, 0.0] {
+            for _ in 0..4 {
+                bank.set_chord(h);
+            }
+            assert_eq!(bank.chord_index(), if h > 0.5 { MAX_CHORDS - 1 } else { 0 });
+        }
+        // Back to the bundled chords: 11 again
+        bank.set_user_chords(None);
+        bank.reset();
+        bank.set_chord(1.0);
+        assert_eq!((bank.num_chords(), bank.chord_index()), (NUM_CHORDS, NUM_CHORDS - 1));
+        // None and an empty table are the same
+        bank.set_user_chords(Some(&[]));
+        assert_eq!(bank.num_chords(), NUM_CHORDS);
     }
 }

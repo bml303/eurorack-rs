@@ -7,7 +7,7 @@ use stmlib::fdsp::one_pole;
 use stmlib::units::semitones_to_ratio;
 
 use super::arpeggiator::{Arpeggiator, ArpeggiatorMode};
-use crate::chords::{ChordBank, NUM_NOTES, NUM_VOICES};
+use crate::chords::{Chord, ChordBank, NUM_NOTES, NUM_VOICES};
 use crate::dsp::SAMPLE_RATE;
 use crate::engine::{
     Engine, EngineParameters, PostProcessingSettings, note_to_frequency, trigger_state,
@@ -51,6 +51,14 @@ impl ChiptuneEngine {
     #[inline]
     pub fn set_envelope_shape(&mut self, envelope_shape: f32) {
         self.envelope_shape = envelope_shape;
+    }
+}
+
+impl ChiptuneEngine {
+    /// A user chord table instead of the bundled chords
+    /// ([`ChordBank::set_user_chords`]), from the next `reset`
+    pub fn set_user_chords(&mut self, chords: Option<&'static [Chord]>) {
+        self.chords.set_user_chords(chords);
     }
 }
 
