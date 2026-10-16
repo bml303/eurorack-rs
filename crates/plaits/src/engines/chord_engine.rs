@@ -4,7 +4,7 @@
 
 use stmlib::fdsp::one_pole;
 
-use crate::chords::{ChordBank, NUM_VOICES};
+use crate::chords::{Chord, ChordBank, NUM_VOICES};
 use crate::engine::{note_to_frequency, Engine, EngineParameters, PostProcessingSettings};
 use crate::oscillator::{StringSynthOscillator, WavetableOscillator};
 use crate::resources::WAV_INTEGRATED_WAVES;
@@ -70,6 +70,14 @@ impl Default for ChordEngine {
             morph_lp: 0.0,
             timbre_lp: 0.0,
         }
+    }
+}
+
+impl ChordEngine {
+    /// A user chord table instead of the bundled chords
+    /// ([`ChordBank::set_user_chords`]), from the next `reset`
+    pub fn set_user_chords(&mut self, chords: Option<&'static [Chord]>) {
+        self.chords.set_user_chords(chords);
     }
 }
 
