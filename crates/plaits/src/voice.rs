@@ -33,6 +33,7 @@ use stmlib::{DelayLine, HysteresisQuantizer2, Limiter};
 
 use crate::PostProcessingSettings;
 use crate::chords::Chord;
+use crate::engines::wavetable_engine::UserWavetable;
 use crate::dsp::INV_SAMPLE_RATE;
 use crate::engine::{Engine, EngineParameters, note_to_frequency, trigger_state};
 use crate::engines::{
@@ -266,6 +267,7 @@ pub struct Voice<'a> {
     user_terrain: Option<&'static [u8]>,
     user_fm_banks: [Option<&'static [u8; SYX_BANK_SIZE]>; 3],
     user_chords: Option<&'static [Chord]>,
+    user_wavetable: Option<&'static UserWavetable>,
     previous_engine_index: i32,
     engine_cv: f32,
 
@@ -315,6 +317,7 @@ impl Voice<'_> {
             user_terrain: None,
             user_fm_banks: [None; 3],
             user_chords: None,
+            user_wavetable: None,
             previous_engine_index: -1,
             engine_cv: 0.0,
 
@@ -439,6 +442,15 @@ impl Voice<'_> {
         self.user_chords = chords;
     }
 
+    /// Sets (or, with `None`, clears) the user wavetable of the wavetable
+    /// engine (13): its fourth bank, which HARMONICS reaches around the
+    /// middle of its range, from the user's map and custom waves instead
+    /// of the shuffled built-in waves. Takes effect the next time the
+    /// engine reloads its data, as [`Voice::set_user_terrain`].
+    pub fn set_user_wavetable(&mut self, wavetable: Option<&'static UserWavetable>) {
+        self.user_wavetable = wavetable;
+    }
+
     #[inline]
     pub fn active_engine(&self) -> i32 {
         self.previous_engine_index
@@ -502,6 +514,7 @@ impl Voice<'_> {
                 13 => {
                     self.wavetable_engine
                         .set_wavetables(&crate::resources::WAV_INTEGRATED_WAVES);
+                    self.wavetable_engine.set_user_wavetable(self.user_wavetable);
                 }
                 _ => {}
             }

@@ -2,10 +2,13 @@
 //! its bundled bank (`Voice::set_user_fm_bank`), and a user terrain sounds
 //! as the wave terrain engine's terrain 8 (`Voice::set_user_terrain`).
 //! A user chord table plays in the string machine, chiptune and chords
-//! engines (`Voice::set_user_chords`).
+//! engines (`Voice::set_user_chords`), a user wavetable as the wavetable
+//! engine's fourth bank (`Voice::set_user_wavetable`).
 
 use plaits::resources::{SYX_BANK_0, SYX_BANK_1};
-use plaits::{Chord, Modulations, Patch, Voice};
+use plaits::engines::wavetable_engine::{NUM_CUSTOM_WAVES, WAVE_SIZE};
+use plaits::resources::WAV_INTEGRATED_WAVES;
+use plaits::{Chord, Modulations, Patch, UserWavetable, Voice};
 
 const BLOCK_SIZE: usize = 12;
 
@@ -148,4 +151,73 @@ fn a_new_chord_table_takes_effect_at_the_reload() {
     let at = 100 * BLOCK_SIZE;
     assert_eq!(reloaded[..at], bundled[..at]);
     assert_ne!(reloaded[at..], bundled[at..], "reloaded: the clusters");
+}
+
+/// A user wavetable from `map`, its custom waves copies of built-in waves
+/// 0..15 (`custom(n)` = built-in `n`), leaked for the voice
+fn wavetable(map: impl Fn(usize) -> u8) -> &'static UserWavetable {
+    let mut waves = [0i16; NUM_CUSTOM_WAVES * WAVE_SIZE];
+    waves.copy_from_slice(&WAV_INTEGRATED_WAVES[..NUM_CUSTOM_WAVES * WAVE_SIZE]);
+    Box::leak(Box::new(UserWavetable { map: core::array::from_fn(map), waves }))
+}
+
+/// HARMONICS in the middle: the fourth bank alone (Z = 3.5 folds to 3)
+const BANK_D: f32 = 0.5;
+
+#[test]
+fn a_user_wavetable_with_plaits_shuffle_plays_as_without_one() {
+    // The C's fallback map: wave i of the bank is built-in (192 + i) * 101 % 192
+    let shuffle = wavetable(|i| ((192 + i) * 101 % 192) as u8);
+    let bundled = render(13, BANK_D, 400, |_| {});
+    assert_eq!(render(13, BANK_D, 400, |v| v.set_user_wavetable(Some(shuffle))), bundled);
+}
+
+#[test]
+fn custom_waves_play_where_the_map_puts_them() {
+    // Custom wave n is a copy of built-in wave n: either map sounds the same
+    let built_in = wavetable(|i| (i % NUM_CUSTOM_WAVES) as u8);
+    let custom = wavetable(|i| (192 + i % NUM_CUSTOM_WAVES) as u8);
+    let a = render(13, BANK_D, 400, |v| v.set_user_wavetable(Some(built_in)));
+    let b = render(13, BANK_D, 400, |v| v.set_user_wavetable(Some(custom)));
+    assert_eq!(a, b);
+    assert_ne!(a, render(13, BANK_D, 400, |_| {}), "not the shuffle");
+    // Past the custom waves: the last one
+    let past = wavetable(|_| 250);
+    let last = wavetable(|_| (192 + NUM_CUSTOM_WAVES - 1) as u8);
+    assert_eq!(
+        render(13, BANK_D, 400, |v| v.set_user_wavetable(Some(past))),
+        render(13, BANK_D, 400, |v| v.set_user_wavetable(Some(last)))
+    );
+}
+
+#[test]
+fn a_user_wavetable_leaves_the_other_banks() {
+    let custom = wavetable(|i| (192 + i % NUM_CUSTOM_WAVES) as u8);
+    // HARMONICS at 0: bank A (higher values glide through D first)
+    assert_eq!(
+        render(13, 0.0, 400, |v| v.set_user_wavetable(Some(custom))),
+        render(13, 0.0, 400, |_| {}),
+        "bank A"
+    );
+    // Cleared: the shuffle again
+    let cleared = render(13, BANK_D, 400, |v| {
+        v.set_user_wavetable(Some(custom));
+        v.set_user_wavetable(None);
+    });
+    assert_eq!(cleared, render(13, BANK_D, 400, |_| {}));
+}
+
+#[test]
+fn a_user_wavetable_from_the_editors_block() {
+    let mut block = vec![0u8; UserWavetable::BLOCK_SIZE];
+    block[0] = 200;
+    block[63] = 7;
+    block[64..66].copy_from_slice(&(-2i16).to_le_bytes());
+    let last = UserWavetable::DATA_SIZE - 2;
+    block[last..last + 2].copy_from_slice(&1234i16.to_le_bytes());
+    let t = UserWavetable::from_bytes(&block).unwrap();
+    assert_eq!((t.map[0], t.map[63], t.waves[0], t.waves[t.waves.len() - 1]), (200, 7, -2, 1234));
+    assert_eq!(UserWavetable::DATA_SIZE, 64 + 15 * 132 * 2);
+    assert!(UserWavetable::from_bytes(&block[..UserWavetable::DATA_SIZE]).is_some(), "without the padding");
+    assert!(UserWavetable::from_bytes(&block[..UserWavetable::DATA_SIZE - 1]).is_none());
 }

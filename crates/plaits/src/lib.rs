@@ -45,4 +45,5 @@ pub mod voice;
 
 pub use engine::{Engine, EngineParameters, PostProcessingSettings};
 pub use chords::{Chord, MAX_CHORDS};
+pub use engines::wavetable_engine::UserWavetable;
 pub use voice::{Frame, Modulations, Patch, Voice, SYX_BANK_SIZE};

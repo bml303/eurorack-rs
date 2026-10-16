@@ -1,11 +1,18 @@
-//! `plaits/dsp/engine/wavetable_engine.h` -- an 8x8x3 wave terrain built from
-//! 192 built-in single-cycle waves (+ up to 15 user-uploaded ones).
+//! `plaits/dsp/engine/wavetable_engine.h` -- four 8x8 banks of waves from
+//! 192 built-in single-cycle waves; HARMONICS goes through them A B C D D C
+//! B A. The fourth bank (Z = 3) is the built-in waves shuffled, or a user
+//! wavetable ([`UserWavetable`]): a map of its 64 waves among the built-in
+//! ones and up to 15 custom waves, the C's `LoadUserData` block (what the
+//! Plaits wavetable editor makes).
 //!
-//! `LoadUserData` takes `Option<&'static [u8]>` rather than owning a copy: the
-//! only realistic source for real (non-`None`) user data is a flash-resident
-//! asset, which is `'static` for the process lifetime; this port doesn't wire
-//! up flash storage, so every caller in this workspace passes `None` (the
-//! fallback wave map the C also uses when its `user_data` pointer is null).
+//! # Deviations from the C
+//!
+//! - The user wavetable is a decoded [`UserWavetable`] given with
+//!   [`WavetableEngine::set_user_wavetable`] (`Voice::set_user_wavetable`)
+//!   instead of the raw bytes through `LoadUserData`, whose waves the C
+//!   reads in place as `int16_t`.
+//! - A map entry past the custom waves plays the last one; the C's
+//!   `min(w - 192, kNumCustomWaves)` reads one wave past them.
 
 use stmlib::fdsp::one_pole;
 
@@ -19,6 +26,54 @@ use crate::utils::parameter_interpolator::SimpleParameterInterpolator;
 
 const TABLE_SIZE: usize = 128;
 const TABLE_SIZE_F: f32 = TABLE_SIZE as f32;
+const NUM_WAVES: usize = 192;
+const WAVES_PER_BANK: usize = 64;
+
+/// Custom waves a user wavetable holds
+pub const NUM_CUSTOM_WAVES: usize = 15;
+/// A wave's samples: the integrated wave's 128, then its first 4 again
+/// (for the interpolation)
+pub const WAVE_SIZE: usize = TABLE_SIZE + 4;
+
+/// A user wavetable: the fourth bank's 64 waves (`map[x + 8 * y]`: 0..192
+/// a built-in wave, 192.. custom wave `n - 192`) and the custom waves,
+/// integrated as the built-in ones are
+#[derive(Debug, Clone, PartialEq)]
+pub struct UserWavetable {
+    pub map: [u8; WAVES_PER_BANK],
+    pub waves: [i16; NUM_CUSTOM_WAVES * WAVE_SIZE],
+}
+
+impl UserWavetable {
+    /// The C's user data block: the map, the waves (little-endian), and
+    /// padding to 4 KB
+    pub const BLOCK_SIZE: usize = 4096;
+    /// The map and the waves, without the padding
+    pub const DATA_SIZE: usize = WAVES_PER_BANK + NUM_CUSTOM_WAVES * WAVE_SIZE * 2;
+
+    /// From the C's user data block (at least `DATA_SIZE` bytes; the rest
+    /// is ignored)
+    pub fn from_bytes(bytes: &[u8]) -> Option<UserWavetable> {
+        if bytes.len() < Self::DATA_SIZE {
+            return None;
+        }
+        let mut table = UserWavetable { map: [0; WAVES_PER_BANK], waves: [0; NUM_CUSTOM_WAVES * WAVE_SIZE] };
+        table.map.copy_from_slice(&bytes[..WAVES_PER_BANK]);
+        for (sample, b) in table.waves.iter_mut().zip(bytes[WAVES_PER_BANK..].chunks_exact(2)) {
+            *sample = i16::from_le_bytes([b[0], b[1]]);
+        }
+        Some(table)
+    }
+
+    /// The samples map entry `wave` (0..64) plays: a built-in wave of
+    /// `built_in` or a custom one
+    fn wave<'a>(&'a self, wave: usize, built_in: &'a [i16]) -> &'a [i16] {
+        match self.map[wave] as usize {
+            w if w < NUM_WAVES => &built_in[w * WAVE_SIZE..],
+            w => &self.waves[(w - NUM_WAVES).min(NUM_CUSTOM_WAVES - 1) * WAVE_SIZE..],
+        }
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct WavetableEngine {
@@ -40,6 +95,7 @@ pub struct WavetableEngine {
     diff_out: Differentiator,
 
     wavetables: &'static [i16; 25344],
+    user: Option<&'static UserWavetable>,
 }
 
 impl Default for WavetableEngine {
@@ -69,11 +125,18 @@ impl WavetableEngine {
             diff_out: Differentiator::new(),
 
             wavetables: &WAV_INTEGRATED_WAVES,
+            user: None,
         }
     }
 
     pub fn set_wavetables(&mut self, wavetables: &'static [i16; 25344]) {
         self.wavetables = wavetables;
+    }
+
+    /// The fourth bank from `user` instead of the shuffled built-in waves,
+    /// or those again with `None`
+    pub fn set_user_wavetable(&mut self, user: Option<&'static UserWavetable>) {
+        self.user = user;
     }
 
     #[inline]
@@ -86,6 +149,10 @@ impl WavetableEngine {
         phase_integral: usize,
         phase_fractional: f32,
     ) -> f32 {
+        if let (3, Some(user)) = (z, self.user) {
+            let samples = user.wave(x + y * 8, &self.wavetables[..]);
+            return interpolate_wave_hermite(samples, phase_integral, phase_fractional);
+        }
         let wave = ((x + y * 8 + z * 64) * randomize) % 192;
         interpolate_wave_hermite(
             &self.wavetables[wave * (TABLE_SIZE + 4)..],
