@@ -38,6 +38,12 @@ mi-tides2 = { path = "crates/tides2" }
 [profile.dev]
 overflow-checks = false
 
+# Braids keeps the C's fixed point bit-exact and makes every wrap explicit
+# (wrapping_*), so its tests check that: a crate using it may build with
+# overflow checks on
+[profile.dev.package.mi-braids]
+overflow-checks = true
+
 [profile.release]
 overflow-checks = false
 lto = true

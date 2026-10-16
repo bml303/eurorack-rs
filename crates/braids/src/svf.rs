@@ -95,14 +95,15 @@ impl Svf {
         let mut damp = self.damp;
         if self.punch != 0 {
             let punch_signal = if self.lp > 4096 { self.lp } else { 2048 };
-            f += ((punch_signal >> 4) * self.punch) >> 9;
+            f += ((punch_signal >> 4).wrapping_mul(self.punch)) >> 9;
             damp += (punch_signal - 2048) >> 3;
         }
-        let notch = input - (self.bp * damp >> 15);
-        self.lp += f * self.bp >> 15;
+        // int products wrap on the Cortex-M3 (UB in C)
+        let notch = input - (self.bp.wrapping_mul(damp) >> 15);
+        self.lp += f.wrapping_mul(self.bp) >> 15;
         self.lp = clip16_sym(self.lp);
         let hp = notch - self.lp;
-        self.bp += f * hp >> 15;
+        self.bp += f.wrapping_mul(hp) >> 15;
         self.bp = clip16_sym(self.bp);
         match self.mode {
             SvfMode::Bp => self.bp,

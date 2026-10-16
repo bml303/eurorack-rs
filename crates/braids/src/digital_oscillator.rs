@@ -498,11 +498,12 @@ impl DigitalOscillator {
             }
             sample = interpolate_88_i16(&WS_MODERATE_OVERDRIVE, (sample + 32768) as u16) as i32;
 
-            let notch = sample - (bp * damp >> 15);
-            lp += f * bp >> 15;
+            // int products wrap on the Cortex-M3 (UB in C)
+            let notch = sample - (bp.wrapping_mul(damp) >> 15);
+            lp += f.wrapping_mul(bp) >> 15;
             lp = clip16_sym(lp);
             let hp = notch - lp;
-            bp += f * hp >> 15;
+            bp += f.wrapping_mul(hp) >> 15;
 
             buffer[i] = clip16_sym(hp) as i16;
         }
@@ -654,7 +655,10 @@ impl DigitalOscillator {
                 saw_tri_signal = ((carrier * window as i32) >> 16) as i16;
                 square_signal = pulse as i16;
             } else {
-                saw_tri_signal = ((window as i32 * (carrier + 32768) >> 16) - 32768) as i16;
+                // Up to 65535 * 65535: the int product wraps on the
+                // Cortex-M3 (UB in C)
+                saw_tri_signal =
+                    (((window as i32).wrapping_mul(carrier + 32768) >> 16) - 32768) as i16;
                 square_signal = if filter_type == 1 {
                     ((pulse + square_integrator) >> 1) as i16
                 } else {
@@ -1315,7 +1319,8 @@ impl DigitalOscillator {
         } else {
             131072u32.wrapping_sub((self.parameter[0] as u32 >> 3).wrapping_mul(31))
         };
-        let mut loss = 4096i16 - (self.phase_increment >> 14) as i16;
+        // As the C: uint32_t arithmetic, truncated to int16_t
+        let mut loss = 4096u32.wrapping_sub(self.phase_increment >> 14) as i16;
         if loss < 256 {
             loss = 256;
         }
@@ -1656,8 +1661,9 @@ impl DigitalOscillator {
     }
 
     fn render_wavetables(&mut self, sync: &[u8], buffer: &mut [i16], size: usize) {
-        if self.parameter[1] > self.previous_parameter[1] + 64
-            || self.parameter[1] < self.previous_parameter[1] - 64
+        // In C the int16_t operands are promoted to int: compare in i32
+        if (self.parameter[1] as i32) > self.previous_parameter[1] as i32 + 64
+            || (self.parameter[1] as i32) < self.previous_parameter[1] as i32 - 64
         {
             self.previous_parameter[1] = self.parameter[1];
         }
@@ -1942,16 +1948,18 @@ impl DigitalOscillator {
         let gain_correction = if f > scale { scale * 32767 / f } else { 32767 };
         for i in 0..size {
             let input = (Random::get_sample() as i32) >> 1;
-            let notch = input - (bp * damp >> 15);
-            lp += f * bp >> 15;
+            // int products wrap on the Cortex-M3 (UB in C); bp and hp
+            // are not clipped
+            let notch = input - (bp.wrapping_mul(damp) >> 15);
+            lp += f.wrapping_mul(bp) >> 15;
             lp = clip16_sym(lp);
             let hp = notch - lp;
-            bp += f * hp >> 15;
+            bp += f.wrapping_mul(hp) >> 15;
 
             let mut result = 0i32;
-            result += (lp_gain * lp) >> 14;
-            result += (bp_gain * bp) >> 14;
-            result += (hp_gain * hp) >> 14;
+            result += lp_gain.wrapping_mul(lp) >> 14;
+            result += bp_gain.wrapping_mul(bp) >> 14;
+            result += hp_gain.wrapping_mul(hp) >> 14;
             result = clip16_sym(result);
             result = result * gain_correction >> 15;
             buffer[i] = interpolate_88_i16(&WS_MODERATE_OVERDRIVE, (result + 32768) as u16);
@@ -2022,13 +2030,14 @@ impl DigitalOscillator {
     }
 
     fn render_clocked_noise(&mut self, sync: &[u8], buffer: &mut [i16], size: usize) {
-        if self.parameter[1] > self.previous_parameter[1] + 64
-            || self.parameter[1] < self.previous_parameter[1] - 64
+        // In C the int16_t operands are promoted to int: compare in i32
+        if (self.parameter[1] as i32) > self.previous_parameter[1] as i32 + 64
+            || (self.parameter[1] as i32) < self.previous_parameter[1] as i32 - 64
         {
             self.previous_parameter[1] = self.parameter[1];
         }
-        if self.parameter[0] > self.previous_parameter[0] + 16
-            || self.parameter[0] < self.previous_parameter[0] - 16
+        if (self.parameter[0] as i32) > self.previous_parameter[0] as i32 + 16
+            || (self.parameter[0] as i32) < self.previous_parameter[0] as i32 - 16
         {
             self.previous_parameter[0] = self.parameter[0];
         }
@@ -2404,7 +2413,7 @@ impl DigitalOscillator {
 
             for _ in 0..2 {
                 let resonator_output = (excitation >> 4) + self.svf[0].process(excitation);
-                lp_state += (resonator_output - lp_state) * lp_coefficient >> 15;
+                lp_state += (resonator_output - lp_state).wrapping_mul(lp_coefficient) >> 15;
                 lp_state = clip16_sym(lp_state);
                 buffer[oi] = lp_state as i16;
                 oi += 1;
