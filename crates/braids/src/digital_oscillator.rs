@@ -27,10 +27,11 @@ use crate::resources::{
     LUT_FLUTE_BODY_FILTER, LUT_FM_FREQUENCY_QUANTIZER, LUT_GRANULAR_ENVELOPE,
     LUT_GRANULAR_ENVELOPE_RATE, LUT_RESONATOR_COEFFICIENT, LUT_RESONATOR_SCALE, LUT_SVF_CUTOFF,
     LUT_SVF_DAMP, LUT_SVF_SCALE, WAV_FORMANT_SINE, WAV_FORMANT_SQUARE, WAV_SINE,
-    WS_MODERATE_OVERDRIVE, WT_CODE, WT_MAP, WT_WAVES,
+    WS_MODERATE_OVERDRIVE, WT_CODE,
 };
 use crate::shapes::DigitalModel;
 use crate::svf::{Svf, SvfMode};
+use crate::user_wavetable::{UserWavetable, BUILT_IN, MAP_SIZE};
 
 const WG_BRIDGE_LENGTH: usize = 1024;
 const WG_NECK_LENGTH: usize = 4096;
@@ -257,6 +258,10 @@ pub struct DigitalOscillator {
     bore: [i16; WG_BORE_LENGTH],
     fluted_jet: [i8; WG_JET_LENGTH],
     fluted_bore: [i8; WG_FBORE_LENGTH],
+
+    /// The wavetable shapes' waves and map (not in the C: the built-in
+    /// ones, or a user wavetable)
+    user: &'static UserWavetable,
 }
 
 impl Default for DigitalOscillator {
@@ -290,6 +295,7 @@ impl DigitalOscillator {
             bore: [0; WG_BORE_LENGTH],
             fluted_jet: [0; WG_JET_LENGTH],
             fluted_bore: [0; WG_FBORE_LENGTH],
+            user: &BUILT_IN,
         };
         o.init();
         o
@@ -332,6 +338,12 @@ impl DigitalOscillator {
     #[inline]
     pub fn phase_increment(&self) -> u32 {
         self.phase_increment
+    }
+
+    /// The wavetable shapes play `user`'s waves and map, or the built-in
+    /// ones again with `None` (not in the C)
+    pub fn set_user_wavetable(&mut self, user: Option<&'static UserWavetable>) {
+        self.user = user.unwrap_or(&BUILT_IN);
     }
 
     #[inline]
@@ -1661,6 +1673,7 @@ impl DigitalOscillator {
     }
 
     fn render_wavetables(&mut self, sync: &[u8], buffer: &mut [i16], size: usize) {
+        let table = self.user;
         // In C the int16_t operands are promoted to int: compare in i32
         if (self.parameter[1] as i32) > self.previous_parameter[1] as i32 + 64
             || (self.parameter[1] as i32) < self.previous_parameter[1] as i32 - 64
@@ -1674,10 +1687,10 @@ impl DigitalOscillator {
         let wt = &WAVETABLE_DEFINITIONS[wavetable_index as usize];
         let wave_pointer =
             (((self.parameter[0] as i32) << 1) as u32).wrapping_mul(wt.num_steps as u32);
-        let mut wave: [&[u8]; 2] = [&WT_WAVES[..129], &WT_WAVES[..129]];
+        let mut wave: [&[u8]; 2] = [table.wave(0), table.wave(0)];
         for (i, w) in wave.iter_mut().enumerate() {
             let wave_index = wt.wave_index[((wave_pointer >> 16) as usize + i).min(16)] as usize;
-            *w = &WT_WAVES[wave_index * 129..wave_index * 129 + 129];
+            *w = table.wave(wave_index);
         }
 
         let phase_increment = self.phase_increment >> 1;
@@ -1694,6 +1707,7 @@ impl DigitalOscillator {
     }
 
     fn render_wave_map(&mut self, sync: &[u8], buffer: &mut [i16], size: usize) {
+        let table = self.user;
         let mut p = [0u16; 2];
         let mut wave_xfade = [0u16; 2];
         let mut wave_coordinate = [0u16; 2];
@@ -1704,14 +1718,14 @@ impl DigitalOscillator {
         wave_coordinate[0] = p[0] >> 11;
         wave_coordinate[1] = p[1] >> 11;
 
-        let mut wave: [[&[u8]; 2]; 2] = [[&WT_WAVES[..129]; 2]; 2];
+        let mut wave: [[&[u8]; 2]; 2] = [[table.wave(0); 2]; 2];
         for i in 0..2 {
             for j in 0..2 {
                 let wave_index = ((wave_coordinate[0] as usize + i) * 16
                     + (wave_coordinate[1] as usize + j))
-                    .min(WT_MAP.len() - 1);
-                let w = WT_MAP[wave_index] as usize;
-                wave[i][j] = &WT_WAVES[w * 129..w * 129 + 129];
+                    .min(MAP_SIZE - 1);
+                let w = table.map(wave_index);
+                wave[i][j] = table.wave(w);
             }
         }
 
@@ -1739,6 +1753,7 @@ impl DigitalOscillator {
     }
 
     fn render_wave_line(&mut self, sync: &[u8], buffer: &mut [i16], size: usize) {
+        let table = self.user;
         // NOTE: the C indexes `wave_line[(scan >> 10) + 1]`, i.e. `wave_line[64]`
         // -- one past this 64-entry table -- whenever the timbre knob sits near
         // its maximum. That out-of-bounds read is a latent Braids bug; the byte
@@ -1758,9 +1773,9 @@ impl DigitalOscillator {
         let w0 = WAVE_LINE[(self.previous_parameter[0] as usize >> 9).min(63)] as usize;
         let w1 = WAVE_LINE[((scan >> 10) as usize).min(63)] as usize;
         let w2 = WAVE_LINE[(((scan >> 10) + 1) as usize).min(63)] as usize;
-        let wave_0 = &WT_WAVES[w0 * 129..w0 * 129 + 129];
-        let wave_1 = &WT_WAVES[w1 * 129..w1 * 129 + 129];
-        let wave_2 = &WT_WAVES[w2 * 129..w2 * 129 + 129];
+        let wave_0 = table.wave(w0);
+        let wave_1 = table.wave(w1);
+        let wave_2 = table.wave(w2);
 
         let smooth_xfade = scan << 6;
         let mut rough_xfade = 0u16;
@@ -1829,6 +1844,7 @@ impl DigitalOscillator {
     }
 
     fn render_wave_paraphonic(&mut self, _sync: &[u8], buffer: &mut [i16], size: usize) {
+        let table = self.user;
         const MINI_WAVE_LINE: [u8; 33] = [
             157, 161, 171, 188, 189, 191, 192, 193, 196, 198, 201, 234, 232, 229, 226, 224, 1, 2,
             3, 4, 5, 8, 12, 32, 36, 42, 47, 252, 254, 141, 139, 135, 174,
@@ -1891,8 +1907,8 @@ impl DigitalOscillator {
 
         let w1 = MINI_WAVE_LINE[(self.parameter[0] as usize >> 10).min(32)] as usize;
         let w2 = MINI_WAVE_LINE[((self.parameter[0] as usize >> 10) + 1).min(32)] as usize;
-        let wave_1 = &WT_WAVES[w1 * 129..w1 * 129 + 129];
-        let wave_2 = &WT_WAVES[w2 * 129..w2 * 129 + 129];
+        let wave_1 = table.wave(w1);
+        let wave_2 = table.wave(w2);
         let wave_xfade = (self.parameter[0] as u32) << 6;
 
         let mut n = size;

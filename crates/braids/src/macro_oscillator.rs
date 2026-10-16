@@ -9,6 +9,7 @@ use crate::analog_oscillator::AnalogOscillator;
 use crate::digital_oscillator::DigitalOscillator;
 use crate::resources::{LUT_SVF_CUTOFF, WS_VIOLENT_OVERDRIVE};
 use crate::shapes::{AnalogOscillatorShape, DigitalModel, MacroOscillatorShape};
+use crate::user_wavetable::UserWavetable;
 
 /// Maximum audio block size (`kAudioBlockSize` on the hardware). `render` panics
 /// if handed a larger block.
@@ -113,6 +114,12 @@ impl MacroOscillator {
     pub fn set_parameters(&mut self, parameter_1: i16, parameter_2: i16) {
         self.parameter[0] = parameter_1;
         self.parameter[1] = parameter_2;
+    }
+
+    /// The wavetable shapes (WTBL, WMAP, WLIN, WTx4) play `user`'s waves
+    /// and map, or the built-in ones again with `None` (not in the C)
+    pub fn set_user_wavetable(&mut self, user: Option<&'static UserWavetable>) {
+        self.digital.set_user_wavetable(user);
     }
 
     #[inline]
