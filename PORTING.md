@@ -102,6 +102,11 @@ Ported and, except where noted above, **bit-verified** against
 * `quantizer` + 50 scales, `svf`, `excitation`, `envelope`,
   `signature_waveshaper`, `vco_jitter_source`
 
+Not in the C: `user_wavetable` — custom waves in place of built-in ones for
+the four wavetable models, and the wave map's map
+(`MacroOscillator::set_user_wavetable`). Without one they read the built-in
+tables exactly as before (`tests/user_wavetable.rs` checks that).
+
 Verification: `cargo test -p mi-braids --test equivalence` (47/48 shapes;
 `WaveLine` excluded, see above).
 

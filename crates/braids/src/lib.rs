@@ -72,6 +72,7 @@ pub mod resources;
 pub mod shapes;
 pub mod signature_waveshaper;
 pub mod svf;
+pub mod user_wavetable;
 pub mod vco_jitter_source;
 
 pub use analog_oscillator::AnalogOscillator;
@@ -83,4 +84,5 @@ pub use quantizer::{Quantizer, Scale, SCALES};
 pub use shapes::{AnalogOscillatorShape, DigitalModel, MacroOscillatorShape};
 pub use signature_waveshaper::SignatureWaveshaper;
 pub use svf::{Svf, SvfMode};
+pub use user_wavetable::UserWavetable;
 pub use vco_jitter_source::VcoJitterSource;
