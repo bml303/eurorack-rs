@@ -45,6 +45,8 @@ pub type RenderFn = fn(
     fb_amount: u8,
     modulation: &Buffer,
     out: &Buffer,
+    start: usize,
+    len: usize,
 );
 
 /// `RenderOperators<n, modulation_source, additive>` -- renders a chain of
@@ -60,8 +62,12 @@ pub fn render_operators<const N: usize, const MODULATION_SOURCE: i32, const ADDI
     fb_amount: u8,
     modulation: &Buffer,
     out: &Buffer,
+    start: usize,
+    len: usize,
 ) {
-    let size = out.borrow().len();
+    // `len` samples from `start` of the buffers: one envelope block of the
+    // voice's render, see `Voice::render`.
+    let size = len;
     let scale = 1.0 / size as f32;
 
     let mut frequency = [0u32; N];
@@ -87,7 +93,7 @@ pub fn render_operators<const N: usize, const MODULATION_SOURCE: i32, const ADDI
         let mut pm = if MODULATION_SOURCE >= MODULATION_SOURCE_FEEDBACK {
             (previous_0 + previous_1) * fb_scale
         } else if MODULATION_SOURCE == MODULATION_SOURCE_EXTERNAL {
-            modulation.borrow()[i]
+            modulation.borrow()[start + i]
         } else {
             0.0
         };
@@ -103,9 +109,9 @@ pub fn render_operators<const N: usize, const MODULATION_SOURCE: i32, const ADDI
         }
 
         if ADDITIVE {
-            out.borrow_mut()[i] += pm;
+            out.borrow_mut()[start + i] += pm;
         } else {
-            out.borrow_mut()[i] = pm;
+            out.borrow_mut()[start + i] = pm;
         }
     }
 

@@ -44,6 +44,10 @@ impl VoiceParameters {
     }
 }
 
+/// The most samples the envelopes, pitch modulation and operator levels
+/// are held constant over, see `Voice::render`
+const ENVELOPE_BLOCK: usize = 20;
+
 #[derive(Debug)]
 pub struct Voice<const NUM_OPERATORS: usize> {
     sample_rate: f32,
@@ -196,92 +200,106 @@ impl<const NUM_OPERATORS: usize> Voice<NUM_OPERATORS> {
         };
 
         let size = buffers[0].borrow().len();
-        let envelope_rate = size as f32;
         let ad_scale = pow_2_fast::<1>((0.5 - parameters.envelope_control) * 8.0);
         let r_scale = pow_2_fast::<1>(-f32::abs(parameters.envelope_control - 0.3) * 8.0);
         let gate_duration = 1.5 * self.sample_rate;
         let envelope_sample = gate_duration * parameters.envelope_control;
 
-        // Apply the LFO and pitch-envelope modulations.
-        let pitch_envelope = if parameters.sustain {
-            self.pitch_envelope.render_at_sample(envelope_sample, gate_duration)
-        } else {
-            self.pitch_envelope.render(parameters.gate, envelope_rate, ad_scale, r_scale)
-        };
-        let pitch_mod = pitch_envelope + parameters.pitch_mod;
-        let f0 = self.a0 * 0.25 * semitones_to_ratio_safe(parameters.note - 9.0 + pitch_mod * 12.0);
+        // The envelopes, the pitch modulation and the operator levels step
+        // once per block of at most ENVELOPE_BLOCK samples, however long the
+        // buffers are. Plaits renders 12-sample blocks (24 with the six-op
+        // engine's staggered rendering); a host rendering 80-sample chunks,
+        // 160 staggered, otherwise flattens the fast attack transients of
+        // the DX7 patches -- a modulator overshooting for a few ms, a pitch
+        // envelope's first segment -- into a single ramp.
+        let mut start = 0;
+        while start < size {
+            let len = (size - start).min(ENVELOPE_BLOCK);
+            let envelope_rate = len as f32;
+            // Apply the LFO and pitch-envelope modulations.
+            let pitch_envelope = if parameters.sustain {
+                self.pitch_envelope.render_at_sample(envelope_sample, gate_duration)
+            } else {
+                self.pitch_envelope.render(parameters.gate, envelope_rate, ad_scale, r_scale)
+            };
+            let pitch_mod = pitch_envelope + parameters.pitch_mod;
+            let f0 = self.a0 * 0.25 * semitones_to_ratio_safe(parameters.note - 9.0 + pitch_mod * 12.0);
 
-        // Sample the note and velocity (which affect scaling, not just pitch)
-        // only on a fresh trigger, or continuously in free-running (sustain)
-        // mode.
-        let note_on = parameters.gate && !self.gate;
-        self.gate = parameters.gate;
-        if note_on || parameters.sustain {
-            self.normalized_velocity = normalize_velocity(parameters.velocity);
-            self.note = parameters.note;
-        }
-
-        if note_on && patch.reset_phase {
-            for operator in &mut self.operator {
-                operator.phase = 0;
+            // Sample the note and velocity (which affect scaling, not just pitch)
+            // only on a fresh trigger, or continuously in free-running (sustain)
+            // mode.
+            let note_on = parameters.gate && !self.gate;
+            self.gate = parameters.gate;
+            if note_on || parameters.sustain {
+                self.normalized_velocity = normalize_velocity(parameters.velocity);
+                self.note = parameters.note;
             }
-        }
 
-        let mut f = [0.0f32; NUM_OPERATORS];
-        let mut a = [0.0f32; NUM_OPERATORS];
-        for i in 0..NUM_OPERATORS {
-            let op = &patch.op[i];
+            if note_on && patch.reset_phase {
+                for operator in &mut self.operator {
+                    operator.phase = 0;
+                }
+            }
 
-            f[i] = self.ratio[i] * if self.ratio[i] < 0.0 { -self.one_hz } else { f0 };
+            let mut f = [0.0f32; NUM_OPERATORS];
+            let mut a = [0.0f32; NUM_OPERATORS];
+            for i in 0..NUM_OPERATORS {
+                let op = &patch.op[i];
 
-            let rate_scale = rate_scaling(self.note, op.rate_scaling);
-            let mut level = if parameters.sustain {
-                self.operator_envelope[i].render_at_sample(envelope_sample, gate_duration)
-            } else {
-                self.operator_envelope[i].render(
-                    parameters.gate,
-                    envelope_rate * rate_scale,
-                    ad_scale,
-                    r_scale,
-                )
-            };
-            let kb_scaling = keyboard_scaling(self.note, &op.keyboard_scaling);
-            let velocity_scaling = self.normalized_velocity * op.velocity_sensitivity as f32;
-            let brightness = if algorithms.is_modulator(patch.algorithm, i) {
-                (parameters.brightness - 0.5) * 32.0
-            } else {
-                0.0
-            };
-            level += 0.125 * (kb_scaling + velocity_scaling + brightness).min(self.level_headroom[i]);
-            self.level[i] = level;
+                f[i] = self.ratio[i] * if self.ratio[i] < 0.0 { -self.one_hz } else { f0 };
 
-            let sensitivity = amp_mod_sensitivity(op.amp_mod_sensitivity);
-            let log_level_mod = sensitivity * parameters.amp_mod - 1.0;
-            let level_mod = 1.0 - pow_2_fast::<2>(6.4 * log_level_mod);
-            a[i] = pow_2_fast::<2>(-14.0 + level * level_mod);
-        }
+                let rate_scale = rate_scaling(self.note, op.rate_scaling);
+                let mut level = if parameters.sustain {
+                    self.operator_envelope[i].render_at_sample(envelope_sample, gate_duration)
+                } else {
+                    self.operator_envelope[i].render(
+                        parameters.gate,
+                        envelope_rate * rate_scale,
+                        ad_scale,
+                        r_scale,
+                    )
+                };
+                let kb_scaling = keyboard_scaling(self.note, &op.keyboard_scaling);
+                let velocity_scaling = self.normalized_velocity * op.velocity_sensitivity as f32;
+                let brightness = if algorithms.is_modulator(patch.algorithm, i) {
+                    (parameters.brightness - 0.5) * 32.0
+                } else {
+                    0.0
+                };
+                level += 0.125 * (kb_scaling + velocity_scaling + brightness).min(self.level_headroom[i]);
+                self.level[i] = level;
 
-        let mut i = 0;
-        while i < NUM_OPERATORS {
-            let call = algorithms.render_call(patch.algorithm, i);
-            let Some(render_fn) = call.render_fn else {
-                // Every operator position gets a `RenderCall` at `compile`
-                // time; a missing one would mean the opcode tables or the
-                // compiler have a bug, not a legitimate "nothing to render"
-                // case -- see the `debug_assert` in `Algorithms::compile`.
-                debug_assert!(false, "operator {i} of algorithm {} has no render call", patch.algorithm);
-                break;
-            };
-            render_fn(
-                &mut self.operator[i..i + call.n],
-                &f[i..],
-                &a[i..],
-                &mut self.feedback_state,
-                patch.feedback,
-                &buffers[call.input_index],
-                &buffers[call.output_index],
-            );
-            i += call.n;
+                let sensitivity = amp_mod_sensitivity(op.amp_mod_sensitivity);
+                let log_level_mod = sensitivity * parameters.amp_mod - 1.0;
+                let level_mod = 1.0 - pow_2_fast::<2>(6.4 * log_level_mod);
+                a[i] = pow_2_fast::<2>(-14.0 + level * level_mod);
+            }
+
+            let mut i = 0;
+            while i < NUM_OPERATORS {
+                let call = algorithms.render_call(patch.algorithm, i);
+                let Some(render_fn) = call.render_fn else {
+                    // Every operator position gets a `RenderCall` at `compile`
+                    // time; a missing one would mean the opcode tables or the
+                    // compiler have a bug, not a legitimate "nothing to render"
+                    // case -- see the `debug_assert` in `Algorithms::compile`.
+                    debug_assert!(false, "operator {i} of algorithm {} has no render call", patch.algorithm);
+                    break;
+                };
+                render_fn(
+                    &mut self.operator[i..i + call.n],
+                    &f[i..],
+                    &a[i..],
+                    &mut self.feedback_state,
+                    patch.feedback,
+                    &buffers[call.input_index],
+                    &buffers[call.output_index],
+                    start,
+                    len,
+                );
+                i += call.n;
+            }
+            start += len;
         }
     }
 }
