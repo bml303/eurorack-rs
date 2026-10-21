@@ -135,7 +135,7 @@ impl<const NUM_OPERATORS: usize> Voice<NUM_OPERATORS> {
     /// Recomputes the envelope constants and frequency ratios [`Voice::
     /// render`] needs from the current patch, if [`Voice::set_patch`] has
     /// been called since the last time this ran. Returns whether it *did*
-    /// anything -- see the CPU-overrun note at its `render` call site.
+    /// anything.
     fn setup(&mut self) -> bool {
         if !self.dirty {
             return false;
@@ -175,19 +175,22 @@ impl<const NUM_OPERATORS: usize> Voice<NUM_OPERATORS> {
     /// `buffers[0]` determines the block size; every buffer must be at
     /// least that long. See [`super::operator::Buffer`] for why a buffer can
     /// legitimately be aliased between two slots.
+#[unsafe(link_section = ".data.plaits_fm")]
+#[inline(never)]
     pub fn render<const NUM_ALGORITHMS: usize>(
         &mut self,
         algorithms: &Algorithms<NUM_OPERATORS, NUM_ALGORITHMS>,
         parameters: &VoiceParameters,
         buffers: &[Buffer; 4],
     ) {
-        if self.setup() {
-            // A patch just became dirty; skip rendering this block rather
-            // than pay for both a setup and a full render in the time this
-            // block's real-time deadline allows. A clean 0.5ms blank when
-            // switching patches, rather than a glitchy overrun.
-            return;
-        }
+        // A patch just became dirty: set up and render in the same block.
+        // The C skips the render here, a 0.5ms blank at its 24-sample
+        // block size, written for a 72MHz target where setup plus a full
+        // render risked the deadline; at larger block sizes the blank is
+        // audible (3.3ms at 80 samples with staggered rendering), and the
+        // setup is a few microseconds against a render at a fraction of
+        // the block's budget on the targets this port runs on.
+        self.setup();
         let Some(patch) = self.patch.as_ref() else {
             return;
         };

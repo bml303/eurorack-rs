@@ -140,6 +140,8 @@ impl Engine for SixOpEngine {
         }
     }
 
+#[unsafe(link_section = ".data.plaits_fm")]
+#[inline(never)]
     fn render(
         &mut self,
         parameters: &EngineParameters,
@@ -232,6 +234,8 @@ impl SixOpEngine {
     /// Naive form: every voice renders exactly this call's block length,
     /// in full, every call. See the module doc for why this is the default.
     #[cfg(not(feature = "six-op-staggered-rendering"))]
+#[unsafe(link_section = ".data.plaits_fm")]
+#[inline(never)]
     fn render_voices(&mut self, out: &mut [f32], aux: &mut [f32]) {
         out.fill(0.0);
         for voice in &mut self.voice {
@@ -268,6 +272,8 @@ impl SixOpEngine {
     /// blocks on whichever voice isn't rendering this call. This matches
     /// the real firmware's behaviour exactly.
     #[cfg(feature = "six-op-staggered-rendering")]
+#[unsafe(link_section = ".data.plaits_fm")]
+#[inline(never)]
     fn render_voices(&mut self, out: &mut [f32], aux: &mut [f32]) {
         let size = out.len();
         let doubled = size * NUM_VOICES;
@@ -359,6 +365,8 @@ impl FmVoice {
         self.voice.set_patch(None);
     }
 
+#[unsafe(link_section = ".data.plaits_fm")]
+#[inline(never)]
     fn render(&mut self, algorithms: &Algorithms<NUM_OPERATORS, NUM_ALGORITHMS>, out: &mut [f32]) {
         if self.patch().is_none() {
             return;

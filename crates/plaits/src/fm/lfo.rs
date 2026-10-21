@@ -103,10 +103,20 @@ impl Lfo {
     }
 
     /// Advances the LFO by `scale` samples (a whole render block at once).
+#[unsafe(link_section = ".data.plaits_fm")]
+#[inline(never)]
     pub fn step(&mut self, scale: f32) {
         self.phase += scale * self.frequency;
         if self.phase >= 1.0 {
-            self.phase -= 1.0;
+            // Deviation from the C, which subtracts 1 once: an unpatched
+            // voice is stepped every block at the 0.1-per-sample default
+            // rate (`new`), 8 per 80-sample block, so its phase ran away by
+            // thousands between the engine being selected and its first
+            // note. The patch's LFO delay then hid it for a few hundred ms
+            // before fading a triangle or ramp reading of thousands into
+            // the pitch and amplitude modulation. Seen on hardware as a
+            // held note running up in pitch and dying ~800 ms in.
+            self.phase -= (self.phase as i32) as f32;
             self.random_value = random::get_float();
         }
         self.value = self.value();

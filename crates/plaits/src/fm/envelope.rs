@@ -67,6 +67,8 @@ impl Envelope {
     /// would have reached by then -- as long as it's still within the
     /// `gate_duration`-long attack/decay/sustain run, or `t - gate_duration`
     /// samples into the release that starts right after.
+#[unsafe(link_section = ".data.plaits_fm")]
+#[inline(never)]
     pub fn render_at_sample(&self, mut t: f32, gate_duration: f32) -> f32 {
         if t > gate_duration {
             let release_phase = (t - gate_duration) * self.increment[RELEASE];
@@ -107,6 +109,8 @@ impl Envelope {
     /// (used for operator envelopes' per-note rate scaling), `ad_scale` and
     /// `release_scale` additionally scale the attack/decay and release
     /// stages respectively (Plaits' `envelope_control` "time-travel" knob).
+#[unsafe(link_section = ".data.plaits_fm")]
+#[inline(never)]
     pub fn render(&mut self, gate: bool, rate: f32, ad_scale: f32, release_scale: f32) -> f32 {
         if gate {
             if self.stage == RELEASE {
