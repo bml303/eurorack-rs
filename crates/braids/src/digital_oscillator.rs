@@ -13,6 +13,11 @@
 //!
 //! [`init`]: DigitalOscillator::init
 
+extern crate alloc;
+
+use alloc::boxed::Box;
+use alloc::vec;
+
 use stmlib::clip16_sym;
 use stmlib::fixed::{
     crossfade_u8, interpolate_1022, interpolate_824_i16, interpolate_824_u16, interpolate_88_i16,
@@ -251,13 +256,16 @@ pub struct DigitalOscillator {
     svf: [Svf; 3],
 
     // `union delay_lines_` -- widened to named fields (host DSP lib, RAM is free).
-    comb: [i16; COMB_DELAY_LENGTH],
-    ks: [i16; 1025 * 4],
-    bowed_bridge: [i8; WG_BRIDGE_LENGTH],
-    bowed_neck: [i8; WG_NECK_LENGTH],
-    bore: [i16; WG_BORE_LENGTH],
-    fluted_jet: [i8; WG_JET_LENGTH],
-    fluted_bore: [i8; WG_FBORE_LENGTH],
+    /// The models' delay lines, 38 KB together, on the heap: the C overlays
+    /// them in a union, this port keeps them apart, and inline they made the
+    /// oscillator 40 KB to build by value on a host's stack
+    comb: Box<[i16]>,
+    ks: Box<[i16]>,
+    bowed_bridge: Box<[i8]>,
+    bowed_neck: Box<[i8]>,
+    bore: Box<[i16]>,
+    fluted_jet: Box<[i8]>,
+    fluted_bore: Box<[i8]>,
 
     /// The wavetable shapes' waves and map (not in the C: the built-in
     /// ones, or a user wavetable)
@@ -288,13 +296,13 @@ impl DigitalOscillator {
             state: State::zeroed(),
             pulse: Default::default(),
             svf: Default::default(),
-            comb: [0; COMB_DELAY_LENGTH],
-            ks: [0; 1025 * 4],
-            bowed_bridge: [0; WG_BRIDGE_LENGTH],
-            bowed_neck: [0; WG_NECK_LENGTH],
-            bore: [0; WG_BORE_LENGTH],
-            fluted_jet: [0; WG_JET_LENGTH],
-            fluted_bore: [0; WG_FBORE_LENGTH],
+            comb: vec![0; COMB_DELAY_LENGTH].into_boxed_slice(),
+            ks: vec![0; 1025 * 4].into_boxed_slice(),
+            bowed_bridge: vec![0; WG_BRIDGE_LENGTH].into_boxed_slice(),
+            bowed_neck: vec![0; WG_NECK_LENGTH].into_boxed_slice(),
+            bore: vec![0; WG_BORE_LENGTH].into_boxed_slice(),
+            fluted_jet: vec![0; WG_JET_LENGTH].into_boxed_slice(),
+            fluted_bore: vec![0; WG_FBORE_LENGTH].into_boxed_slice(),
             user: &BUILT_IN,
         };
         o.init();

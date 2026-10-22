@@ -110,6 +110,11 @@ tables exactly as before (`tests/user_wavetable.rs` checks that).
 Verification: `cargo test -p mi-braids --test equivalence` (47/48 shapes;
 `WaveLine` excluded, see above).
 
+`MacroOscillator` is built by value; the digital models' delay lines
+(38 KB together, which the C overlays in a union) are on the heap so a
+host can build it on its stack (`tests/oscillator_size.rs` keeps it under
+4 KB). The crate therefore needs an allocator, as `mi-plaits` does.
+
 ## `mi-plaits` status
 
 Ported (23 of 24 engine models working; `SpeechEngine` is a documented
