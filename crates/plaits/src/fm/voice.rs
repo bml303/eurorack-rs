@@ -183,8 +183,6 @@ impl<const NUM_OPERATORS: usize> Voice<NUM_OPERATORS> {
     /// `buffers[0]` determines the block size; every buffer must be at
     /// least that long. See [`super::operator::Buffer`] for why a buffer can
     /// legitimately be aliased between two slots.
-#[unsafe(link_section = ".data.plaits_fm")]
-#[inline(never)]
     pub fn render<const NUM_ALGORITHMS: usize>(
         &mut self,
         algorithms: &Algorithms<NUM_OPERATORS, NUM_ALGORITHMS>,
