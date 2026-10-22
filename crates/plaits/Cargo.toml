@@ -27,6 +27,11 @@ path = "src/lib.rs"
 # to the original firmware's 12 samples) are where this earns its keep;
 # don't reach for it at a large block size without measuring first.
 six-op-staggered-rendering = []
+# Compute the pitch reference `A0` from the original module's true sample
+# rate (47872.34 Hz, its I2S clock divider) instead of `SAMPLE_RATE`, as
+# the C firmware does -- see `dsp.rs`. Only for a host that reproduces that
+# clocking; one playing at a true 48 kHz leaves it off.
+original-module-sample-rate = []
 
 [dependencies]
 mi-stmlib.workspace = true
