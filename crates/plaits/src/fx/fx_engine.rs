@@ -7,17 +7,24 @@
 //! sample-at-a-time accumulator with `Read`/`Write`/`WriteAllPass`/`Interpolate`
 //! operating on those offsets. None of that machinery is meaningful outside
 //! C++ template instantiation, so this port keeps only what it computes: one
-//! `[f32; N]` ring buffer per effect (`N` a power of two) plus the handful of
+//! ring buffer of `N` floats per effect (`N` a power of two, on the heap: the
+//! diffuser's is 32 KB, which would otherwise sit inline in the voice a host
+//! builds by value on its stack) plus the handful of
 //! accumulator operations `Diffuser`/`Ensemble` actually call, taking a
 //! `(base, length)` pair instead of a `D: DelayLine` type parameter. Compressed
 //! 12-bit storage isn't reproduced (this port always stores `f32`); it was a
 //! RAM-saving trick, not part of the audible algorithm's shape.
 
+extern crate alloc;
+
+use alloc::boxed::Box;
+use alloc::vec;
+
 /// One shared power-of-two ring buffer plus the running accumulator state,
 /// matching `FxEngine<N>::Context` for one sample.
 #[derive(Debug)]
 pub struct FxBuffer<const N: usize> {
-    buffer: [f32; N],
+    buffer: Box<[f32]>,
     write_ptr: i64,
     lfo: [stmlib::CosineOscillator; 2],
     lfo_value: [f32; 2],
@@ -27,7 +34,7 @@ impl<const N: usize> Default for FxBuffer<N> {
     fn default() -> Self {
         assert!(N.is_power_of_two());
         Self {
-            buffer: [0.0; N],
+            buffer: vec![0.0; N].into_boxed_slice(),
             write_ptr: 0,
             lfo: [
                 stmlib::CosineOscillator::new(stmlib::CosineOscillatorMode::Approximate, 0.001),
@@ -48,7 +55,7 @@ pub struct Tap {
 
 impl<const N: usize> FxBuffer<N> {
     pub fn clear(&mut self) {
-        self.buffer = [0.0; N];
+        self.buffer.fill(0.0);
         self.write_ptr = 0;
     }
 

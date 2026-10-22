@@ -75,7 +75,8 @@ const RENDER_FACTOR: usize = 1;
 #[derive(Debug, Default)]
 pub struct SixOpEngine {
     algorithms: Algorithms<NUM_OPERATORS, NUM_ALGORITHMS>,
-    patches: [Patch; NUM_PATCHES_PER_BANK],
+    /// On the heap, 12 KB, see `fx::fx_engine`
+    patches: Box<[Patch]>,
     patch_index_quantizer: HysteresisQuantizer2,
     voice: [FmVoice; NUM_VOICES],
 
@@ -99,7 +100,7 @@ impl SixOpEngine {
     pub fn new(block_size: usize) -> Self {
         Self {
             algorithms: Algorithms::new(),
-            patches: core::array::from_fn(|_| Patch::new()),
+            patches: vec![Patch::new(); NUM_PATCHES_PER_BANK].into_boxed_slice(),
             patch_index_quantizer: HysteresisQuantizer2::new(),
             voice: core::array::from_fn(|_| FmVoice::new(block_size * RENDER_FACTOR)),
             temp_buffer: vec![0.0; block_size * RENDER_FACTOR].into_boxed_slice(),

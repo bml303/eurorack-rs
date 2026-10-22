@@ -127,7 +127,12 @@ lylepmills/eurorack), implemented for `SixOpEngine` only (modulator
 detune, post low-pass below centre, drive above — see that engine's
 module doc); every other engine ignores it.
 
-The crate takes no position on where its code lives. On a microcontroller
+`Voice` is built by value, so a host builds it on its stack before moving
+it where it lives; the engines' large buffers (the particle diffuser's
+32 KB ring, the string engine's delay lines, the six-op patch table) are
+on the heap for that reason, keeping the voice itself under 16 KB
+(`tests/voice_size.rs` guards it). The crate takes no position on where
+its code lives. On a microcontroller
 that runs from flash through a small XIP cache the engines render several
 times slower than from RAM (3-4x on an RP2350 whose other core shares the
 cache), so a host that has the RAM puts the whole crate there from its
