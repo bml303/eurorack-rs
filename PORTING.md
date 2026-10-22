@@ -127,6 +127,28 @@ lylepmills/eurorack), implemented for `SixOpEngine` only (modulator
 detune, post low-pass below centre, drive above — see that engine's
 module doc); every other engine ignores it.
 
+The crate takes no position on where its code lives. On a microcontroller
+that runs from flash through a small XIP cache the engines render several
+times slower than from RAM (3-4x on an RP2350 whose other core shares the
+cache), so a host that has the RAM puts the whole crate there from its
+linker script rather than this crate marking hot spots with
+`link_section`: Rust names every function's and static's section after
+its mangled symbol, in which the crate name follows the crate id as
+`_6plaits`, so with cortex-m-rt a `memory.x` rule like
+
+```
+SECTIONS {
+    .data.plaits : ALIGN(4)
+    {
+        *(.text.*_6plaits* .rodata.*_6plaits*);
+        *(.text.*_9mi_stmlib* .rodata.*_9mi_stmlib*);
+        *(.text.*_4libm* .text.memcpy* .text.memset* .text.memmove*);
+    } > RAM AT>FLASH
+} INSERT AFTER .data;
+```
+
+loads the crate with `.data` (about 160 KB of code and tables).
+
 ## `mi-clouds` status
 
 Fully ported — floating point (Cortex-M4F), so like `plaits` no bit-exactness

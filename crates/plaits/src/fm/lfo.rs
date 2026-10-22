@@ -103,8 +103,6 @@ impl Lfo {
     }
 
     /// Advances the LFO by `scale` samples (a whole render block at once).
-#[unsafe(link_section = ".data.plaits_fm")]
-#[inline(never)]
     pub fn step(&mut self, scale: f32) {
         self.phase += scale * self.frequency;
         if self.phase >= 1.0 {

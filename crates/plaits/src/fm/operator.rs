@@ -52,8 +52,6 @@ pub type RenderFn = fn(
 /// `RenderOperators<n, modulation_source, additive>` -- renders a chain of
 /// `N` operators, each phase-modulating the next, into (or, if `ADDITIVE`,
 /// added onto) `out`.
-#[unsafe(link_section = ".data.plaits_render_operators")]
-#[inline(never)]
 pub fn render_operators<const N: usize, const MODULATION_SOURCE: i32, const ADDITIVE: bool>(
     ops: &mut [Operator],
     f: &[f32],
