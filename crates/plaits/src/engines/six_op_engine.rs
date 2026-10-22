@@ -120,7 +120,7 @@ impl Engine for SixOpEngine {
         self.patch_index_quantizer.init(32, 0.005, false);
 
         for voice in &mut self.voice {
-            voice.init(crate::dsp::SAMPLE_RATE);
+            voice.init(crate::dsp::CORRECTED_SAMPLE_RATE);
         }
 
         self.active_voice = NUM_VOICES - 1;
@@ -157,7 +157,7 @@ impl Engine for SixOpEngine {
             // drives a shared LFO position for both voices, since neither is
             // really "the" active one in this mode.
             let t = parameters.morph;
-            self.voice[0].lfo.scrub(2.0 * crate::dsp::SAMPLE_RATE * t);
+            self.voice[0].lfo.scrub(2.0 * crate::dsp::CORRECTED_SAMPLE_RATE * t);
             let pitch_mod = self.voice[0].lfo.pitch_mod();
             let amp_mod = self.voice[0].lfo.amp_mod();
 
