@@ -7,6 +7,10 @@
 //! doesn't need the external `BufferAllocator` dance -- can just reuse the
 //! stmlib one directly).
 
+extern crate alloc;
+
+use alloc::boxed::Box;
+
 use stmlib::fdsp::{crossfade, interpolate, one_pole};
 use stmlib::filter::{DcBlocker, FilterMode, FrequencyApproximation, Svf};
 use stmlib::parameter_interpolator::ParameterInterpolator;
@@ -27,8 +31,9 @@ pub enum StringNonLinearity {
 
 #[derive(Debug)]
 pub struct String {
-    string: DelayLine<DELAY_LINE_SIZE>,
-    stretch: DelayLine<{ DELAY_LINE_SIZE / 4 }>,
+    /// On the heap, 10 KB per string, see `fx::fx_engine`
+    string: Box<DelayLine<DELAY_LINE_SIZE>>,
+    stretch: Box<DelayLine<{ DELAY_LINE_SIZE / 4 }>>,
     iir_damping_filter: Svf,
     dc_blocker: DcBlocker,
     delay: f32,
@@ -41,8 +46,8 @@ pub struct String {
 impl Default for String {
     fn default() -> Self {
         Self {
-            string: DelayLine::default(),
-            stretch: DelayLine::default(),
+            string: Box::default(),
+            stretch: Box::default(),
             iir_damping_filter: Svf::default(),
             dc_blocker: DcBlocker::default(),
             delay: 100.0,
