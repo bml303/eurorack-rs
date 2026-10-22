@@ -36,6 +36,10 @@ pub struct VoiceParameters {
     pub envelope_control: f32,
     pub pitch_mod: f32,
     pub amp_mod: f32,
+    /// Detunes every modulator operator by this many semitones, the
+    /// carriers not at all: Plaits Palette's (Rubato) six-op macro, not in
+    /// Mutable's firmware. 0 is the stock sound.
+    pub modulator_detune: f32,
 }
 
 impl VoiceParameters {
@@ -224,6 +228,7 @@ impl<const NUM_OPERATORS: usize> Voice<NUM_OPERATORS> {
             };
             let pitch_mod = pitch_envelope + parameters.pitch_mod;
             let f0 = self.a0 * 0.25 * semitones_to_ratio_safe(parameters.note - 9.0 + pitch_mod * 12.0);
+            let modulator_ratio = semitones_to_ratio_safe(parameters.modulator_detune);
 
             // Sample the note and velocity (which affect scaling, not just pitch)
             // only on a fresh trigger, or continuously in free-running (sustain)
@@ -247,6 +252,9 @@ impl<const NUM_OPERATORS: usize> Voice<NUM_OPERATORS> {
                 let op = &patch.op[i];
 
                 f[i] = self.ratio[i] * if self.ratio[i] < 0.0 { -self.one_hz } else { f0 };
+                if algorithms.is_modulator(patch.algorithm, i) {
+                    f[i] *= modulator_ratio;
+                }
 
                 let rate_scale = rate_scaling(self.note, op.rate_scaling);
                 let mut level = if parameters.sustain {

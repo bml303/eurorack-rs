@@ -22,7 +22,7 @@ pub mod trigger_state {
     pub const HIGH: i32 = 4;
 }
 
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy)]
 pub struct EngineParameters {
     pub trigger: i32,
     pub note: f32,
@@ -30,6 +30,26 @@ pub struct EngineParameters {
     pub morph: f32,
     pub harmonics: f32,
     pub accent: f32,
+    /// A fourth synthesis macro, 0..1 with 0.5 the stock sound: from the
+    /// Plaits Palette alternative firmware (Rubato, lylepmills/eurorack),
+    /// not Mutable's, where the FREQUENCY knob drives it with the pitch
+    /// locked. Each engine gives it its own meaning; only `SixOpEngine`
+    /// implements it here, the rest ignore it.
+    pub fourth_macro: f32,
+}
+
+impl Default for EngineParameters {
+    fn default() -> Self {
+        Self {
+            trigger: 0,
+            note: 0.0,
+            timbre: 0.0,
+            morph: 0.0,
+            harmonics: 0.0,
+            accent: 0.0,
+            fourth_macro: 0.5,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
