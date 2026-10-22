@@ -24,6 +24,7 @@ fn patch(engine: i32, harmonics: f32) -> Patch {
         engine,
         decay: 0.5,
         lpg_colour: 0.5,
+        fourth_macro: 0.5,
     }
 }
 

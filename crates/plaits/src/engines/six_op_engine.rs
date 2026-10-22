@@ -30,6 +30,13 @@
 //!   schedule. (Naive-by-default cross-checked against the independent Rust
 //!   port at <https://github.com/sourcebox/mi-plaits-dsp-rs> (MIT), which
 //!   made the same choice.)
+//! - [`EngineParameters::fourth_macro`] is implemented as in the Plaits
+//!   Palette alternative firmware (Rubato, lylepmills/eurorack), which
+//!   Mutable's has no counterpart for: every modulator operator is detuned
+//!   by up to +-12 semitones across the range (`24 * (macro - 0.5)`, the
+//!   carriers untouched), below 0.5 a one-pole low-pass after the soft
+//!   clip darkens the output, above 0.5 a soft-limit drive is blended in.
+//!   At 0.5 exactly the engine renders as Mutable's.
 //! - The C's `Algorithms<6>` is a `const Algorithms<6>*` every `FMVoice`
 //!   holds a pointer to, computed once and shared; since nothing here needs
 //!   it outside of rendering, this port keeps a single owned copy on
@@ -48,7 +55,7 @@ use crate::fm::lfo::Lfo;
 use crate::fm::patch::{Patch, SYX_SIZE};
 use crate::fm::voice::{Voice, VoiceParameters};
 use crate::utils::hysteresis_quantizer::HysteresisQuantizer2;
-use crate::utils::soft_clip;
+use crate::utils::{one_pole, soft_clip, soft_limit};
 
 const NUM_OPERATORS: usize = 6;
 const NUM_ALGORITHMS: usize = 32;
@@ -74,6 +81,8 @@ pub struct SixOpEngine {
 
     temp_buffer: Box<[f32]>,
     active_voice: usize,
+    /// The fourth macro's low-pass state, see [`SixOpEngine::shape`]
+    post_filter: f32,
 
     /// Whose turn it is to get a full (`NUM_VOICES`-blocks-long) render this
     /// call -- see [`SixOpEngine::render_voices`]. Unrelated to
@@ -95,6 +104,7 @@ impl SixOpEngine {
             voice: core::array::from_fn(|_| FmVoice::new(block_size * RENDER_FACTOR)),
             temp_buffer: vec![0.0; block_size * RENDER_FACTOR].into_boxed_slice(),
             active_voice: 0,
+            post_filter: 0.0,
             #[cfg(feature = "six-op-staggered-rendering")]
             rendered_voice: 0,
             #[cfg(feature = "six-op-staggered-rendering")]
@@ -124,6 +134,7 @@ impl Engine for SixOpEngine {
         }
 
         self.active_voice = NUM_VOICES - 1;
+        self.post_filter = 0.0;
         #[cfg(feature = "six-op-staggered-rendering")]
         {
             self.rendered_voice = 0;
@@ -150,6 +161,7 @@ impl Engine for SixOpEngine {
         already_enveloped: bool,
     ) -> bool {
         let patch_index = self.patch_index_quantizer.process(parameters.harmonics * 1.02) as usize;
+        let modulator_detune = 24.0 * (parameters.fourth_macro - 0.5);
 
         if parameters.trigger == trigger_state::UNPATCHED {
             // No envelope/gate patched in: free-run, "scrubbing" through the
@@ -172,6 +184,7 @@ impl Engine for SixOpEngine {
                     envelope_control: t,
                     pitch_mod,
                     amp_mod,
+                    modulator_detune,
                 };
             }
         } else {
@@ -194,6 +207,7 @@ impl Engine for SixOpEngine {
 
             for (i, voice) in self.voice.iter_mut().enumerate() {
                 voice.parameters.brightness = parameters.timbre;
+                voice.parameters.modulator_detune = modulator_detune;
                 voice.parameters.sustain = false;
                 voice.parameters.gate =
                     parameters.trigger == trigger_state::HIGH && i == self.active_voice;
@@ -214,7 +228,9 @@ impl Engine for SixOpEngine {
             }
         }
 
-        self.render_voices(out, aux);
+        self.render_voices(out);
+        self.shape(out, parameters.fourth_macro);
+        aux.copy_from_slice(out);
 
         already_enveloped
     }
@@ -229,14 +245,40 @@ impl Engine for SixOpEngine {
 }
 
 impl SixOpEngine {
-    /// Renders both voices into `out`/`aux` (both start this call as
-    /// whatever the caller last left them; every byte gets overwritten).
+    /// The fourth macro's shaping after the soft clip, as Plaits Palette's
+    /// six-op engine: below 0.5 a one-pole low-pass, its coefficient down
+    /// to 0.08 at 0, above 0.5 a soft-limit drive blended in up to 1 at 1.
+    /// At 0.5 the samples pass unchanged; the filter state follows them so
+    /// the low-pass starts from the current output when the macro moves
+    /// below centre.
+    #[inline(always)]
+    fn shape(&mut self, out: &mut [f32], fourth_macro: f32) {
+        if fourth_macro < 0.5 {
+            let darkness = (0.5 - fourth_macro) * 2.0;
+            let coefficient = 1.0 - darkness * 0.92;
+            for sample in out.iter_mut() {
+                one_pole(&mut self.post_filter, *sample, coefficient);
+                *sample = self.post_filter;
+            }
+        } else if fourth_macro > 0.5 {
+            let saturation = (fourth_macro - 0.5) * 2.0;
+            for sample in out.iter_mut() {
+                self.post_filter = *sample;
+                *sample += (soft_limit(*sample * 3.0) - *sample) * saturation;
+            }
+        } else if let Some(last) = out.last() {
+            self.post_filter = *last;
+        }
+    }
+
+    /// Renders both voices into `out` (which starts this call as whatever
+    /// the caller last left it; every byte gets overwritten).
     /// Naive form: every voice renders exactly this call's block length,
     /// in full, every call. See the module doc for why this is the default.
     #[cfg(not(feature = "six-op-staggered-rendering"))]
 #[unsafe(link_section = ".data.plaits_fm")]
 #[inline(never)]
-    fn render_voices(&mut self, out: &mut [f32], aux: &mut [f32]) {
+    fn render_voices(&mut self, out: &mut [f32]) {
         out.fill(0.0);
         for voice in &mut self.voice {
             self.temp_buffer.fill(0.0);
@@ -245,10 +287,9 @@ impl SixOpEngine {
                 *out_sample = soft_clip(*out_sample + *temp_sample * 0.25);
             }
         }
-        aux.copy_from_slice(out);
     }
 
-    /// Renders both voices into `out`/`aux`, staggered: only
+    /// Renders both voices into `out`, staggered: only
     /// `self.rendered_voice` gets a full render this call, for
     /// `NUM_VOICES * out.len()` samples (`out.len()` real ones, plus
     /// `out.len()` more "for next time"), alternating which voice that is
@@ -274,7 +315,7 @@ impl SixOpEngine {
     #[cfg(feature = "six-op-staggered-rendering")]
 #[unsafe(link_section = ".data.plaits_fm")]
 #[inline(never)]
-    fn render_voices(&mut self, out: &mut [f32], aux: &mut [f32]) {
+    fn render_voices(&mut self, out: &mut [f32]) {
         let size = out.len();
         let doubled = size * NUM_VOICES;
         debug_assert!(
@@ -291,7 +332,6 @@ impl SixOpEngine {
         for (out_sample, temp_sample) in out.iter_mut().zip(self.temp_buffer[..size].iter()) {
             *out_sample = soft_clip(*temp_sample * 0.25);
         }
-        aux.copy_from_slice(out);
 
         self.acc_buffer[..size].copy_from_slice(&self.temp_buffer[size..doubled]);
     }
@@ -335,6 +375,7 @@ impl FmVoice {
             envelope_control: 0.5,
             pitch_mod: 0.0,
             amp_mod: 0.0,
+            modulator_detune: 0.0,
         };
     }
 

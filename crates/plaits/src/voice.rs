@@ -156,6 +156,11 @@ pub struct Patch {
     pub decay: f32,
     // -- Low-pass gate color in the range from `0.0` to `1.0`. Default is `0.5`.
     pub lpg_colour: f32,
+    // -- fourth synthesis macro in the range from `0.0` to `1.0`. Default is
+    // -- `0.5`, the stock sound. Not a Plaits control: Plaits Palette's
+    // -- (Rubato) per-engine macro, see `EngineParameters::fourth_macro`;
+    // -- only the six-op FM engine implements it.
+    pub fourth_macro: f32,
 }
 
 impl Default for Patch {
@@ -171,6 +176,7 @@ impl Default for Patch {
             engine: 0,
             decay: 0.5,
             lpg_colour: 0.5,
+            fourth_macro: 0.5,
         }
     }
 }
@@ -560,6 +566,7 @@ impl Voice<'_> {
 
         // Actual synthesis parameters.
         p.harmonics = (patch.harmonics + modulations.harmonics).clamp(0.0, 1.0);
+        p.fourth_macro = patch.fourth_macro.clamp(0.0, 1.0);
 
         let mut internal_envelope_amplitude = 1.0f32;
         let mut internal_envelope_amplitude_timbre = 1.0f32;

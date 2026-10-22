@@ -120,7 +120,12 @@ block rather than the C's CPU-optimised "staggered" alternate-voice
 rendering (see that engine's module doc for why), but the `six-op-
 staggered-rendering` Cargo feature restores the C's exact scheme for
 targets where it's worth it — see the feature's doc comment in
-`crates/plaits/Cargo.toml`.
+`crates/plaits/Cargo.toml`. One addition that is not in Mutable's firmware:
+`Patch::fourth_macro` (default 0.5 = stock), the per-engine "fourth
+synthesis macro" of the Plaits Palette alternative firmware (Rubato,
+lylepmills/eurorack), implemented for `SixOpEngine` only (modulator
+detune, post low-pass below centre, drive above — see that engine's
+module doc); every other engine ignores it.
 
 ## `mi-clouds` status
 
