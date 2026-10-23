@@ -13,13 +13,21 @@
 //!   reads in place as `int16_t`.
 //! - A map entry past the custom waves plays the last one; the C's
 //!   `min(w - 192, kNumCustomWaves)` reads one wave past them.
+//! - [`EngineParameters::fourth_macro`] warps the phase, as the Plaits
+//!   Palette alternative firmware's TWIST does on its wave library
+//!   ("bipolar phase warp", neutral at centre): the waves are read at
+//!   `p + a sin(2 pi p) / (2 pi)`, `a = 1.5 (macro - 0.5)`, which runs
+//!   through the first half of the cycle faster above centre, slower
+//!   below. The waves are integrated, so the differentiated output is
+//!   divided by the warp's slope (`1 + a cos(2 pi p)`, 0.25 at least) to
+//!   keep the level. At 0.5 exactly the engine renders as Mutable's.
 
 use stmlib::fdsp::one_pole;
 
 use crate::PostProcessingSettings;
 use crate::dsp::SAMPLE_RATE;
 use crate::engine::{Engine, EngineParameters, note_to_frequency};
-use crate::oscillator::{Differentiator, interpolate_wave_hermite};
+use crate::oscillator::{Differentiator, interpolate_wave_hermite, sine};
 use crate::resources::WAV_INTEGRATED_WAVES;
 
 use crate::utils::parameter_interpolator::SimpleParameterInterpolator;
@@ -28,6 +36,9 @@ const TABLE_SIZE: usize = 128;
 const TABLE_SIZE_F: f32 = TABLE_SIZE as f32;
 const NUM_WAVES: usize = 192;
 const WAVES_PER_BANK: usize = 64;
+/// The phase warp's depth at either end of the fourth macro: the warp's
+/// slope stays within 1 +- this
+const WARP_MAX: f32 = 0.75;
 
 /// Custom waves a user wavetable holds
 pub const NUM_CUSTOM_WAVES: usize = 15;
@@ -245,6 +256,7 @@ impl Engine for WavetableEngine {
         );
 
         let f0_modulation = SimpleParameterInterpolator::new(self.previous_f0, f0, out.len());
+        let warp = 2.0 * WARP_MAX * (parameters.fourth_macro - 0.5);
 
         for (out_sample, aux_sample) in out.iter_mut().zip(aux.iter_mut()) {
             let f0 = f0_modulation.update(&mut self.previous_f0);
@@ -284,7 +296,21 @@ impl Engine for WavetableEngine {
                 self.phase -= 1.0;
             }
 
-            let p = self.phase * TABLE_SIZE_F;
+            // -- the fourth macro's phase warp, and its slope, which the
+            // -- differentiated output is divided by
+            let (phase, slope) = if warp != 0.0 {
+                let mut warped = self.phase + warp * sine(self.phase) * (1.0 / core::f32::consts::TAU);
+                if warped >= 1.0 {
+                    warped -= 1.0;
+                } else if warped < 0.0 {
+                    warped += 1.0;
+                }
+                (warped, 1.0 + warp * sine(self.phase + 0.25))
+            } else {
+                (self.phase, 1.0)
+            };
+
+            let p = phase * TABLE_SIZE_F;
             let p_integral = p as usize;
             let p_fractional = p - (p_integral as f32);
 
@@ -328,6 +354,9 @@ impl Engine for WavetableEngine {
 
                 let mut mix = xyz0 + (xyz1 - xyz0) * z_fractional;
                 mix = self.diff_out.process(cutoff, mix) * gain;
+                if warp != 0.0 {
+                    mix /= slope;
+                }
                 *out_sample = mix;
                 *aux_sample = (((mix * 32.0) as i32) as f32) / 32.0;
             }

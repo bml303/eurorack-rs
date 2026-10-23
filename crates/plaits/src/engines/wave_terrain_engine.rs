@@ -2,6 +2,12 @@
 //! evaluated along an elliptical path, computed on the fly rather than
 //! looked up from a stored table.
 //!
+//! [`EngineParameters::fourth_macro`] moves the path down or up the
+//! terrain, as the Plaits Palette alternative firmware's TWIST does
+//! ("Down / up" on the scan axis): MORPH moves it along x, the macro along
+//! y the same way, from -0.95 to 0.95, the path shrunk to stay on the
+//! terrain. At 0.5 exactly the engine renders as Mutable's.
+//!
 //! `terrain_index == 8` is a user-supplied terrain (in the C, loaded from
 //! flash; here, wired through [`crate::voice::Voice::set_user_terrain`] to
 //! whatever the host application loads at runtime). It's only reachable once
@@ -89,6 +95,8 @@ fn squash(x: f32, a: f32) -> f32 {
 pub struct WaveTerrainEngine {
     path: FastSineOscillator,
     offset: f32,
+    /// the fourth macro's offset along y
+    y_offset: f32,
     terrain: f32,
     temp_buffer_1: Box<[f32]>,
     temp_buffer_2: Box<[f32]>,
@@ -100,6 +108,7 @@ impl WaveTerrainEngine {
         Self {
             path: FastSineOscillator::default(),
             offset: 0.0,
+            y_offset: 0.0,
             terrain: 0.0,
             temp_buffer_1: vec![0.0; block_size * 2].into_boxed_slice(),
             temp_buffer_2: vec![0.0; block_size * 2].into_boxed_slice(),
@@ -154,6 +163,7 @@ impl Engine for WaveTerrainEngine {
     fn init(&mut self) {
         self.path.init();
         self.offset = 0.0;
+        self.y_offset = 0.0;
         self.terrain = 0.0;
         self.user_terrain = None;
     }
@@ -186,6 +196,8 @@ impl Engine for WaveTerrainEngine {
 
         let mut offset =
             ParameterInterpolator::new(&mut self.offset, 1.9 * parameters.morph - 1.0, size);
+        let mut y_offset =
+            ParameterInterpolator::new(&mut self.y_offset, 1.9 * (parameters.fourth_macro - 0.5), size);
         let num_terrains = if self.user_terrain.is_some() { 9 } else { 8 };
         let mut terrain = ParameterInterpolator::new(
             &mut self.terrain,
@@ -196,6 +208,7 @@ impl Engine for WaveTerrainEngine {
         let mut ij = 0usize;
         for i in 0..size {
             let x_offset = offset.next();
+            let y_offset = y_offset.next();
 
             let z = terrain.next();
             let z_integral = z as i32;
@@ -206,7 +219,7 @@ impl Engine for WaveTerrainEngine {
 
             for _ in 0..OVERSAMPLING {
                 let x = path_x[ij] * (1.0 - x_offset.abs()) + x_offset;
-                let y = path_y[ij];
+                let y = path_y[ij] * (1.0 - y_offset.abs()) + y_offset;
                 ij += 1;
 
                 let z0 = terrain_fn(self.user_terrain, x, y, z_integral);
