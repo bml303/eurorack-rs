@@ -128,9 +128,10 @@ targets where it's worth it — see the feature's doc comment in
 `crates/plaits/Cargo.toml`. One addition that is not in Mutable's firmware:
 `Patch::fourth_macro` (default 0.5 = stock), the per-engine "fourth
 synthesis macro" of the Plaits Palette alternative firmware (Rubato,
-lylepmills/eurorack), implemented for `SixOpEngine` only (modulator
-detune, post low-pass below centre, drive above — see that engine's
-module doc); every other engine ignores it.
+lylepmills/eurorack), implemented for `SixOpEngine` (modulator detune,
+post low-pass below centre, drive above), `WavetableEngine` (a bipolar
+phase warp) and `WaveTerrainEngine` (the path down or up the terrain) —
+see those engines' module docs; every other engine ignores it.
 
 `Voice` is built by value, so a host builds it on its stack before moving
 it where it lives; the engines' large buffers (the particle diffuser's

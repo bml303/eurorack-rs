@@ -33,8 +33,9 @@ pub struct EngineParameters {
     /// A fourth synthesis macro, 0..1 with 0.5 the stock sound: from the
     /// Plaits Palette alternative firmware (Rubato, lylepmills/eurorack),
     /// not Mutable's, where the FREQUENCY knob drives it with the pitch
-    /// locked. Each engine gives it its own meaning; only `SixOpEngine`
-    /// implements it here, the rest ignore it.
+    /// locked. Each engine gives it its own meaning; `SixOpEngine`,
+    /// `WavetableEngine` and `WaveTerrainEngine` implement it here, the
+    /// rest ignore it.
     pub fourth_macro: f32,
 }
 

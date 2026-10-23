@@ -159,7 +159,7 @@ pub struct Patch {
     // -- fourth synthesis macro in the range from `0.0` to `1.0`. Default is
     // -- `0.5`, the stock sound. Not a Plaits control: Plaits Palette's
     // -- (Rubato) per-engine macro, see `EngineParameters::fourth_macro`;
-    // -- only the six-op FM engine implements it.
+    // -- the six-op FM, wavetable and wave terrain engines implement it.
     pub fourth_macro: f32,
 }
 
