@@ -10,9 +10,9 @@ pub const INV_SAMPLE_RATE: f32 = 1.0 / SAMPLE_RATE;
 // rate (4.6 cents) rather than the nominal one. That is a property of that
 // module's clock tree, not of the DSP: a host that really plays the samples
 // at `SAMPLE_RATE` must not apply the correction, or every engine that
-// derives its pitch from `A0` comes out 4.6 cents flat (and, since the
-// six-op FM voice takes the rate it is given, flat relative to that engine
-// too). The default therefore keeps `A0` consistent with `SAMPLE_RATE`;
+// derives its pitch from `A0` comes out 4.6 cents sharp (the six-op FM
+// voice too, since it is initialised with the same corrected rate). The
+// default therefore keeps `A0` consistent with `SAMPLE_RATE`;
 // the `original-module-sample-rate` feature restores the module's
 // corrected rate for a host that reproduces its clocking exactly. Ported
 // code must keep using `A0` for note-to-frequency conversion rather than
