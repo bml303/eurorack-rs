@@ -9,7 +9,9 @@
 //! C++ template instantiation, so this port keeps only what it computes: one
 //! ring buffer of `N` floats per effect (`N` a power of two, on the heap: the
 //! diffuser's is 32 KB, which would otherwise sit inline in the voice a host
-//! builds by value on its stack) plus the handful of
+//! builds by value on its stack; boxed as `[f32; N]` rather than `[f32]` so
+//! the length stays a compile-time constant and the `& (N - 1)` mask elides
+//! every tap's bounds check) plus the handful of
 //! accumulator operations `Diffuser`/`Ensemble` actually call, taking a
 //! `(base, length)` pair instead of a `D: DelayLine` type parameter. Compressed
 //! 12-bit storage isn't reproduced (this port always stores `f32`); it was a
@@ -24,7 +26,7 @@ use alloc::vec;
 /// matching `FxEngine<N>::Context` for one sample.
 #[derive(Debug)]
 pub struct FxBuffer<const N: usize> {
-    buffer: Box<[f32]>,
+    buffer: Box<[f32; N]>,
     write_ptr: i64,
     lfo: [stmlib::CosineOscillator; 2],
     lfo_value: [f32; 2],
@@ -34,7 +36,8 @@ impl<const N: usize> Default for FxBuffer<N> {
     fn default() -> Self {
         assert!(N.is_power_of_two());
         Self {
-            buffer: vec![0.0; N].into_boxed_slice(),
+            // Built through a `Vec` so the array never exists on the stack.
+            buffer: vec![0.0; N].into_boxed_slice().try_into().unwrap(),
             write_ptr: 0,
             lfo: [
                 stmlib::CosineOscillator::new(stmlib::CosineOscillatorMode::Approximate, 0.001),
